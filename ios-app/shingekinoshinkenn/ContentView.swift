@@ -6,56 +6,57 @@
 //
 
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @StateObject private var haptics = HapticManager()
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
+        VStack(spacing: 24) {
+            Text("真剣 — 振動デモ")
+                .font(.title.bold())
+
+            Text("CoreHaptics の触覚パターンを再生します。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 16) {
+                hapticButton("トランジェント（鋭い単発）", systemImage: "bolt.fill") {
+                    haptics.playTransient()
                 }
-                .onDelete(perform: deleteItems)
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
+                hapticButton("連続（持続する震え）", systemImage: "waveform") {
+                    haptics.playContinuous()
                 }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
+                hapticButton("抜刀（うねり → ジャキィン）", systemImage: "scissors") {
+                    haptics.playDraw()
                 }
             }
-        } detail: {
-            Text("Select an item")
+            .disabled(!haptics.supportsHaptics)
+            .opacity(haptics.supportsHaptics ? 1 : 0.4)
+
+            if !haptics.supportsHaptics {
+                Text("⚠️ この端末はハプティクスに対応していません。\n実機（iPhone）で実行してください。")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+            }
         }
+        .padding()
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+    private func hapticButton(
+        _ title: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .frame(maxWidth: .infinity)
+                .padding()
         }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
-            }
-        }
+        .buttonStyle(.borderedProminent)
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
 }
