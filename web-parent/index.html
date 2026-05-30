@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SHINGEKI NO SHINKEN - BATTLE PANEL</title>
+  
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- 昼のドッキング用：要素を一瞬で非表示にできるユーティリティクラス -->
+  <style>
+    .hidden {
+      display: none !important;
+    }
+  </style>
+  
+  <!-- TensorFlow.js and Pose Detection CDN (MediaPipe Pose Heavy Support) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@3.11.0/dist/tf-core.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@3.11.0/dist/tf-converter.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.0.0/dist/pose-detection.min.js"></script>
+  
+  <!-- MediaPipe Pose Official SDK (Required for modelComplexity: 2) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+</head>
+<body>
+
+  <!-- Camera Auth State & Start Battle Button Overlay -->
+  <div id="setup-overlay" class="setup-overlay">
+    <div class="setup-card">
+      <h2 class="game-title">SHINGEKI NO SHINKEN</h2>
+      <p class="subtitle">MultiPose Battle System</p>
+      <p>
+        本システムはWebカメラを用いて全身骨格をリアルタイムに検知し、バトルを行います。<br><br>
+        「カメラの開始」ボタンを押してカメラの利用を許可してください。画面に描画される骨格線（ワイヤーフレーム）を目視して動作をデバッグできます。
+      </p>
+      <button id="start-btn" class="start-btn">カメラの開始（許可）</button>
+      <div id="setup-status" class="setup-status">検出器の初期化待ち...</div>
+    </div>
+  </div>
+
+  <!-- Header Section -->
+  <header>
+    <h1 class="game-title">SHINGEKI NO SHINKEN</h1>
+    <div id="game-phase-title" class="subtitle">フェーズ：武器選択中</div>
+  </header>
+
+  <!-- Main Game Dashboard -->
+  <main class="battle-container">
+    
+    <!-- Player 1 (Left Area Swing Detection) -->
+    <div id="p1-card" class="player-card p1">
+      <div class="slash-effect" id="p1-flash"></div>
+      <div class="player-badge">PLAYER 1</div>
+      <h2 class="player-name">青き神剣 (LEFT)</h2>
+      
+      <!-- Weapon Registration Debbuging UI -->
+      <div class="reg-box">
+        <div class="reg-label">武器選択＆抜刀ステータス</div>
+        <div id="p1-reg-status" class="reg-status">骨格検出待ち...</div>
+      </div>
+
+      <div class="score-wrapper">
+        <div id="p1-score" class="score-num">0</div>
+      </div>
+      <div class="score-label">斬撃カウント (SLASHS)</div>
+    </div>
+
+    <!-- Center Control (Live Visualizer Monitor) -->
+    <div class="monitor-wrapper">
+      <div class="monitor-border">
+        <!-- ビデオ要素を display: block で明示（style.cssでも定義されていますが、インラインで display: block を確実化） -->
+        <video id="webcam" autoplay playsinline width="400" height="300" style="display: block;"></video>
+        <!-- キャンバスIDを output_canvas に統一 -->
+        <canvas id="output_canvas" width="400" height="300"></canvas>
+      </div>
+      <div class="timer-box-horizontal">
+        <div class="timer-label">残り時間</div>
+        <div id="game-timer" class="timer-num">90</div>
+      </div>
+      <div class="vs-badge">V S</div>
+    </div>
+
+    <!-- Player 2 (Right Area Swing Detection) -->
+    <div id="p2-card" class="player-card p2">
+      <div class="slash-effect" id="p2-flash"></div>
+      <div class="player-badge">PLAYER 2</div>
+      <h2 class="player-name">紅き神剣 (RIGHT)</h2>
+      
+      <!-- Weapon Registration Debbuging UI -->
+      <div class="reg-box">
+        <div class="reg-label">武器選択＆抜刀ステータス</div>
+        <div id="p2-reg-status" class="reg-status">骨格検出待ち...</div>
+      </div>
+
+      <div class="score-wrapper">
+        <div id="p2-score" class="score-num">0</div>
+      </div>
+      <div class="score-label">斬撃カウント (SLASHS)</div>
+    </div>
+
+  </main>
+
+  <!-- Footer Info & Tracking Status Indicator -->
+  <footer>
+    <div class="status-indicator">
+      <span id="status-dot" class="status-dot"></span>
+      <span id="status-text">モーション検出オフライン</span>
+    </div>
+  </footer>
+
+  <!-- JavaScript module connection -->
+  <script type="module" src="script.js"></script>
+</body>
+</html>
