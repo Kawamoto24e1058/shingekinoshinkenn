@@ -55,10 +55,10 @@ const playersState = {
   player2: { prevLeftWristY: null, prevRightWristY: null, lastSwingTime: 0 }
 };
 
-// ── 💡 進捗の滑らかな累積と減衰に対応した最新ステート ──
+// ── 💡 猶予時間（グレースピリオド）と滑らかな累積・減衰に対応したステート ──
 const selectionState = {
-  player1: { locked: false, selectedWeapon: null, detectingWeapon: null, lastActiveTime: 0, accumulatedTime: 0, progress: 0 },
-  player2: { locked: false, selectedWeapon: null, detectingWeapon: null, lastActiveTime: 0, accumulatedTime: 0, progress: 0 }
+  player1: { locked: false, selectedWeapon: null, detectingWeapon: null, lastActiveTime: 0, accumulatedTime: 0, progress: 0, lostStartTime: 0 },
+  player2: { locked: false, selectedWeapon: null, detectingWeapon: null, lastActiveTime: 0, accumulatedTime: 0, progress: 0, lostStartTime: 0 }
 };
 
 // MediaPipe Pose 33点 接続ライン
@@ -327,8 +327,11 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
     if (currentPoseDetecting) {
       const weaponNameJP = weaponNames[currentPoseDetecting];
 
+      // 的に入っているため、外れた際の猶予タイマーをリセット
+      sel.lostStartTime = 0;
+
       if (sel.detectingWeapon === currentPoseDetecting) {
-        // 検知継続：時間経過分を加算
+        // 検知継続：時間経過分を加算 (1.5秒 = 1500ms で確実に100%確定へ)
         const now = Date.now();
         const dt = now - sel.lastActiveTime;
         sel.lastActiveTime = now;
@@ -375,12 +378,23 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
         regStatusEl.className = "reg-status detecting";
       }
     } else {
-      // ターゲットから外れた：蓄積値を徐々に減衰 (外れている間は2倍の速度で減っていく)
+      // ターゲットから外れた：猶予時間（グレースピリオド）と滑らかなデクリメント
       const now = Date.now();
+      
+      if (!sel.lostStartTime) {
+        sel.lostStartTime = now; // 最初にはずれた時刻を記録
+      }
+
+      const elapsedLost = now - sel.lostStartTime;
       const dt = sel.lastActiveTime ? (now - sel.lastActiveTime) : 0;
       sel.lastActiveTime = now;
 
-      sel.accumulatedTime = Math.max(0, (sel.accumulatedTime || 0) - dt * 2.0);
+      // 💡 超重要：外れてから 500ms（0.5秒）以内は、進捗を一切減らさず完璧にキープ！
+      if (elapsedLost > 500) {
+        // 0.5秒を過ぎたら、1フレームあたり通常の 0.3 倍の速度でゆっくり減衰させる
+        sel.accumulatedTime = Math.max(0, (sel.accumulatedTime || 0) - dt * 0.3);
+      }
+      
       sel.progress = Math.min(100, Math.floor((sel.accumulatedTime / 1500) * 100));
 
       if (sel.accumulatedTime > 0 && sel.detectingWeapon) {
@@ -390,6 +404,7 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
       } else {
         sel.detectingWeapon = null;
         sel.progress = 0;
+        sel.lostStartTime = 0;
         regStatusEl.textContent = "武器の構えを取ってください (大剣/刀/セーバー)";
         regStatusEl.className = "reg-status";
       }
@@ -522,7 +537,7 @@ function drawSkeleton(poses) {
               const gsRad = getDrawRadius("greatsword");
               const ktRad = getDrawRadius("sword");
 
-              // ライトセーバー（両手首が的の中）
+              // ライトセーバー（両手首が的の中、スコア 0.2）
               if (rightWrist && leftWrist && rightWrist.score > 0.2 && leftWrist.score > 0.2) {
                 const rDist = Math.hypot(rightWrist.x - t.lightsaber.x, rightWrist.y - t.lightsaber.y);
                 const lDist = Math.hypot(leftWrist.x - t.lightsaber.x, leftWrist.y - t.lightsaber.y);
