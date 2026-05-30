@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MONITORING SYSTEM</title>
+    <style>
+        /* --- 宇宙船のドックや近未来のスタジアムを意識した背景 --- */
+        body {
+            background-color: #0b0e14;
+            /* サイバー感のあるうっすらとしたグリッド背景 */
+            background-image: 
+                linear-gradient(rgba(0, 242, 254, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 242, 254, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+            color: white;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: background-color 0.05s ease;
+        }
+
+        /* --- アクティベート通知（警告灯風デザイン） --- */
+        #audioNotice {
+            position: absolute;
+            top: 20px;
+            background: linear-gradient(135deg, #ff9900, #ff5500);
+            color: black;
+            font-weight: bold;
+            padding: 12px 30px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            z-index: 100;
+            box-shadow: 0 0 20px rgba(255, 85, 0, 0.5);
+            letter-spacing: 1px;
+            border: 1px solid #fff;
+            animation: pulse 1.5s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.9; }
+            100% { transform: scale(1.03); opacity: 1; }
+        }
+
+        /* --- 大会ロゴ風サブタイトル --- */
+        .subtitle {
+            font-size: 1.2rem;
+            color: #00f2fe;
+            letter-spacing: 8px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(0, 242, 254, 0.6);
+            border-bottom: 2px solid rgba(0, 242, 254, 0.3);
+            padding-bottom: 5px;
+            z-index: 5;
+        }
+
+        /* --- 特大スコアボード --- */
+        .scoreboard {
+            background: linear-gradient(180deg, rgba(16, 23, 37, 0.9) 0%, rgba(8, 12, 21, 0.95) 100%);
+            border: 2px solid #324665;
+            padding: 20px 60px;
+            border-radius: 12px; /* 角を丸めつつ四角形に見せる */
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8), inset 0 0 20px rgba(0, 242, 254, 0.1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 50px;
+            z-index: 5;
+            position: relative;
+            /* clip-path を削除して完全な四角形に戻しました */
+            border-top: 4px solid #00f2fe;
+            min-width: 500px;
+        }
+
+        /* チーム名ラベル */
+        .team-label {
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            color: #aaa;
+            position: absolute;
+            top: 15px;
+        }
+        .label-p1 { left: 40px; color: #ff416c; }
+        .label-p2 { right: 40px; color: #00f2fe; }
+
+        .score-num {
+            font-size: 8rem;
+            font-weight: bold;
+            font-family: 'Impact', sans-serif;
+            transition: transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: inline-block;
+            margin-top: 15px;
+        }
+        
+        /* レッドチーム（ネオンピンク） */
+        #p1Score { 
+            color: #ff416c; 
+            text-shadow: 0 0 30px rgba(255, 65, 108, 0.8), 0 0 10px rgba(255, 65, 108, 0.5); 
+        }
+        /* ブルーチーム（サイバーシアン） */
+        #p2Score { 
+            color: #00f2fe; 
+            text-shadow: 0 0 30px rgba(0, 242, 254, 0.8), 0 0 10px rgba(0, 242, 254, 0.5); 
+        }
+
+        .vs-text {
+            color: #4f678c; 
+            font-size: 2.5rem; 
+            font-style: italic;
+            border: 1px solid #324665;
+            padding: 5px 15px;
+            background: rgba(0,0,0,0.4);
+            transform: skewX(-15deg); /* 斜めにするSF風デザイン */
+        }
+
+        .bump { transform: scale(1.25) rotate(3deg); }
+
+        /* フラッシュ演出の強化 */
+        .flash-p1 { background-color: rgba(255, 0, 60, 0.4) !important; }
+        .flash-p2 { background-color: rgba(0, 162, 255, 0.4) !important; }
+
+        /* --- ⚔️ 刀の斬撃軌跡 --- */
+        .slash-line {
+            position: absolute;
+            top: 50%;
+            left: -10%;
+            width: 120%;
+            height: 0px;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 10;
+            transform-origin: center;
+        }
+
+        .line-p1 {
+            background: linear-gradient(90deg, transparent, #fff 40%, #ff416c 60%, transparent);
+            box-shadow: 0 0 50px #ff003c, 0 0 20px #fff;
+            transform: translateY(-50%) rotate(-12deg);
+        }
+
+        .line-p2 {
+            background: linear-gradient(90deg, transparent, #fff 40%, #00f2fe 60%, transparent);
+            box-shadow: 0 0 50px #00a2ff, 0 0 20px #fff;
+            transform: translateY(-50%) rotate(12deg);
+        }
+
+        .swipe-animation {
+            animation: slashSwipe 0.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+        }
+
+        @keyframes slashSwipe {
+            0% { height: 0px; opacity: 0; clip-path: inset(0 100% 0 0); }
+            20% { height: 25px; opacity: 1; }
+            40% { clip-path: inset(0 0 0 0); }
+            100% { height: 0px; opacity: 0; clip-path: inset(0 0 0 100%); }
+        }
+
+        /* --- 💥 飛び出す「斬！」の文字 --- */
+        .slash-text {
+            position: absolute;
+            font-size: 12rem;
+            color: #fff;
+            font-style: italic;
+            font-weight: bold;
+            transform: scale(0);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 11;
+        }
+        .text-p1 { text-shadow: 0 0 40px #ff003c, 0 0 60px #ff416c; }
+        .text-p2 { text-shadow: 0 0 40px #00a2ff, 0 0 60px #00f2fe; }
+
+        .pop-animation {
+            animation: slashPop 0.4s ease-out forwards;
+        }
+
+        @keyframes slashPop {
+            0% { transform: scale(0) rotate(-15deg); opacity: 0; }
+            20% { transform: scale(1.3) rotate(5deg); opacity: 1; }
+            80% { transform: scale(1.1) rotate(0deg); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+
+        /* --- テスト用コントロールパネル --- */
+        .test-controls {
+            margin-top: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+            z-index: 5;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #00f2fe;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.3);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 15px;
+        }
+
+        .test-btn {
+            padding: 12px 20px;
+            font-size: 1rem;
+            border: 2px solid;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .test-btn:hover { transform: scale(1.05); }
+        .test-btn:active { transform: scale(0.95); }
+        .btn-p1 { background-color: #ff416c; color: white; border-color: #ff003c; }
+        .btn-p1:hover { box-shadow: 0 0 15px rgba(255, 65, 108, 0.6); }
+        .btn-p2 { background-color: #00f2fe; color: black; border-color: #00a2ff; }
+        .btn-p2:hover { box-shadow: 0 0 15px rgba(0, 242, 254, 0.6); }
+
+        .control-label {
+            color: #00f2fe;
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body onclick="unlockAudio()">
+
+    <div id="audioNotice">📢 【SYSTEM】 最初に画面をクリックしてアクティベート</div>
+
+    <div class="subtitle">⚔️ BATTLE SYSTEM ⚔️</div>
+
+    <div class="scoreboard">
+        <div class="team-label label-p1">PLAYER 1</div>
+        <span id="p1Score" class="score-num">0</span>
+        <span class="vs-text">VS</span>
+        <span id="p2Score" class="score-num">0</span>
+        <div class="team-label label-p2">PLAYER 2</div>
+    </div>
+
+    <div id="slashLine" class="slash-line"></div>
+    <div id="slashText" class="slash-text">斬！</div>
+
+    <div class="test-controls">
+        <div class="control-label">【PLAYER 1】</div>
+        <div class="btn-group">
+            <button class="test-btn btn-p1" onclick="unlockAudio(); triggerSlash(1, 'katana')">刀 🗡️</button>
+            <button class="test-btn btn-p1" onclick="unlockAudio(); triggerSlash(1, 'taiken')">大剣 🪓</button>
+            <button class="test-btn btn-p1" onclick="unlockAudio(); triggerSlash(1, 'sabers')">光剣 ⚡</button>
+        </div>
+        
+        <div class="control-label">【PLAYER 2】</div>
+        <div class="btn-group">
+            <button class="test-btn btn-p2" onclick="unlockAudio(); triggerSlash(2, 'katana')">刀 🗡️</button>
+            <button class="test-btn btn-p2" onclick="unlockAudio(); triggerSlash(2, 'taiken')">大剣 🪓</button>
+            <button class="test-btn btn-p2" onclick="unlockAudio(); triggerSlash(2, 'sabers')">光剣 ⚡</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
