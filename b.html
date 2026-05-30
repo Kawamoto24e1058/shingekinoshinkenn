@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PHYSICAL COMBAT - MONITOR SYSTEM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Noto+Sans+JP:wght@500;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #03030c;
+            --neon-blue: #00f2ff;
+            --neon-red: #ff0055;
+            --neon-yellow: #ccff00;
+            --panel-bg: rgba(6, 6, 26, 0.85);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: var(--bg-color);
+            color: #fff;
+            font-family: 'Noto Sans JP', sans-serif;
+            overflow-x: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* 背景グリッド */
+        .grid-bg {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: 
+                linear-gradient(rgba(0, 242, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            z-index: -1;
+        }
+
+        /* ヘッダー */
+        header {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+        }
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 900;
+            letter-spacing: 4px;
+            color: #fff;
+            text-shadow: 0 0 10px var(--neon-blue);
+        }
+        .logo span { color: var(--neon-yellow); }
+
+        /* メインコンテナ（画面切り替え用） */
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* 画面共通スタイル */
+        .screen {
+            display: none;
+            width: 100%;
+            animation: fadeIn 0.5s ease forwards;
+        }
+        .screen.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* ==========================================
+           1. ゲーム説明画面 (GUIDE SCREEN)
+        ========================================== */
+        .guide-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+        .panel {
+            background: var(--panel-bg);
+            border: 2px solid #1a1a3a;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        .panel-title {
+            font-size: 1.5rem;
+            font-weight: 900;
+            margin-bottom: 20px;
+            border-bottom: 3px solid var(--neon-blue);
+            padding-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        /* 武器カード */
+        .weapon-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .weapon-card {
+            background: rgba(255,255,255,0.02);
+            border-left: 5px solid #fff;
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+        }
+        .weapon-card.katana { border-color: var(--neon-blue); }
+        .weapon-card.taiken { border-color: var(--neon-red); }
+        .weapon-card.saber { border-color: var(--neon-yellow); }
+        
+        .weapon-name { font-weight: 900; font-size: 1.2rem; margin-bottom: 5px; }
+        .weapon-desc { font-size: 0.9rem; color: #aaa; }
+        
+        /* ルール解説 */
+        .rule-box {
+            margin-bottom: 20px;
+        }
+        .rule-box h4 { color: var(--neon-yellow); margin-bottom: 5px; font-size: 1.1rem;}
+        .rule-box p { font-size: 0.95rem; color: #ddd; line-height: 1.6; }
+
+        /* ==========================================
+           2. リアルタイム対戦画面 (BATTLE SCREEN)
+        ========================================== */
+        .battle-arena {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 50px;
+        }
+        .fighter-box {
+            flex: 1;
+            text-align: center;
+            padding: 40px;
+            background: rgba(255,255,255,0.02);
+            border-radius: 16px;
+            position: relative;
+        }
+        .fighter-box.p1 { border: 2px solid var(--neon-blue); box-shadow: 0 0 30px rgba(0,242,255,0.2); }
+        .fighter-box.p2 { border: 2px solid var(--neon-red); box-shadow: 0 0 30px rgba(255,0,85,0.2); }
+        
+        .fighter-name { font-family: 'Orbitron', sans-serif; font-size: 2rem; font-weight: 900; margin-bottom: 10px; }
+        .score { font-family: 'Orbitron', sans-serif; font-size: 7rem; font-weight: 900; line-height: 1; }
+        .p1 .score { color: var(--neon-blue); text-shadow: 0 0 20px var(--neon-blue); }
+        .p2 .score { color: var(--neon-red); text-shadow: 0 0 20px var(--neon-red); }
+        
+        .vs-sign {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3rem;
+            font-style: italic;
+            font-weight: 900;
+            color: var(--neon-yellow);
+            text-shadow: 0 0 15px var(--neon-yellow);
+        }
+
+        /* ==========================================
+           3. 勝敗判定リザルト (RESULT SCREEN)
+        ========================================== */
+        .result-box {
+            text-align: center;
+            background: var(--panel-bg);
+            border: 3px solid var(--neon-yellow);
+            border-radius: 20px;
+            padding: 60px;
+            max-width: 800px;
+            margin: 0 auto;
+            box-shadow: 0 0 50px rgba(204,255,0,0.2);
+        }
+        .winner-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 4rem;
+            font-weight: 900;
+            color: var(--neon-yellow);
+            text-shadow: 0 0 20px var(--neon-yellow);
+            margin-bottom: 20px;
+            letter-spacing: 2px;
+        }
+        .winner-name {
+            font-size: 2.5rem;
+            font-weight: 900;
+            margin-bottom: 30px;
+        }
+        .final-scores {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2rem;
+            color: #aaa;
+        }
+
+        /* 開発者用コントロールパネル（画面下部固定） */
+        .dev-panel {
+            background: #111;
+            border-top: 2px solid #333;
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            z-index: 100;
+        }
+        .dev-btn {
+            background: #222;
+            color: #fff;
+            border: 1px solid #444;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 4px;
+            transition: 0.2s;
+        }
+        .dev-btn:hover { background: #333; border-color: var(--neon-blue); }
+        .dev-btn.active-btn { background: var(--neon-blue); color: #000; border-color: var(--neon-blue); }
+    </style>
+</head>
+<body>
+
+    <div class="grid-bg"></div>
+
+    <header>
+        <div class="logo">SYNCHRO <span>COMBAT</span></div>
+    </header>
+
+    <main class="main-content">
+
+        <div id="screen-guide" class="screen active">
+            <div class="guide-grid">
+                <div class="panel">
+                    <div class="panel-title">SYSTEM OVERVIEW<span>システム概要</span></div>
+                    <div class="rule-box">
+                        <h4>📱 画面を見ない対戦</h4>
+                        <p>プレイヤーはスマホの画面を見ず、対峙する相手の「身体の動き」だけを目視して戦う完全同期型のリアルバトルです。</p>
+                    </div>
+                    <div class="rule-box">
+                        <h4>⚡ ヒット（通常命中）</h4>
+                        <p>相手が動いていない隙を狙い、端末を鋭くスイング（一閃）させることで有効打となり、スコアが加算されます。</p>
+                    </div>
+                    <div class="rule-box">
+                        <h4>🛡️ パリィ（相互相殺）</h4>
+                        <p>相手の攻撃と同時に自分も斬りつけた場合、相殺（パリィ）が発生。双方ダメージ無効となり、強烈な金属跳ね返り振動が手元にフィードバックされます。</p>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">WEAPON SELECT<span>兵装選択</span></div>
+                    <div class="weapon-list">
+                        <div class="weapon-card katana">
+                            <div class="weapon-name">① 刀 - KATANA</div>
+                            <div class="weapon-desc">【腰元に水平に構えて抜刀】標準的な威力。斬撃時にシャープで鋭いパルス振動を1回実行。</div>
+                        </div>
+                        <div class="weapon-card taiken">
+                            <div class="weapon-name">② 大剣 - TAIKEN</div>
+                            <div class="weapon-desc">【刃先を下げて肩後に構えて抜刀】一撃必殺の超高威力。ただし、振った後1.5秒間は攻撃不能。重厚な持続振動。</div>
+                        </div>
+                        <div class="weapon-card saber">
+                            <div class="weapon-name">③ ビームサーベル</div>
+                            <div class="weapon-desc">【天に向かって垂直に構えて抜刀】威力は低いが、攻撃硬直0秒で高速連撃が可能。起動中は常に微細な高周波振動。</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="screen-battle" class="screen">
+            <div class="battle-arena">
+                <div class="fighter-box p1">
+                    <div class="fighter-name">PLAYER 1</div>
+                    <div class="score" id="p1-score">0</div>
+                </div>
+                <div class="vs-sign">VS</div>
+                <div class="fighter-box p2">
+                    <div class="fighter-name">PLAYER 2</div>
+                    <div class="score" id="p2-score">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="screen-result" class="screen">
+            <div class="result-box">
+                <div class="winner-title">VICTORY</div>
+                <div class="winner-name" id="winner-display">PLAYER 1 WIN!</div>
+                <div class="final-scores" id="final-score-display">00 VS 00</div>
+            </div>
+        </div>
+
+    </main>
+
+    <div class="dev-panel">
+        <button class="dev-btn active-btn" onclick="switchScreen('guide', this)">① 説明画面を見る</button>
+        <button class="dev-btn" onclick="switchScreen('battle', this)">② 対戦画面（ダミー）</button>
+        <button class="dev-btn" onclick="addScore(1)">P1得点(+1)</button>
+        <button class="dev-btn" onclick="addScore(2)">P2得点(+1)</button>
+        <button class="dev-btn" onclick="showResult()">③ 勝敗リザルトを見る</button>
+    </div>
+
+    <script>
+        let p1Score = 0;
+        let p2Score = 0;
+
+        // 画面の切り替え
+        function switchScreen(screenId, btn) {
+            // 全画面を非表示に
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            // 指定画面を表示
+            document.getElementById('screen-' + screenId).classList.add('active');
+
+            // ボタンのスタイル変更
+            if(btn) {
+                document.querySelectorAll('.dev-btn').forEach(b => b.classList.remove('active-btn'));
+                btn.classList.add('active-btn');
+            }
+        }
+
+        // ダミーのスコア加算機能（Firebase連携時はここをonSnapshotに書き換える）
+        function addScore(player) {
+            switchScreen('battle');
+            if(player === 1) {
+                p1Score++;
+                document.getElementById('p1-score').innerText = p1Score;
+            } else {
+                p2Score++;
+                document.getElementById('p2-score').innerText = p2Score;
+            }
+        }
+
+        // 勝敗判定ロジックのシミュレーション
+        function showResult() {
+            let winnerText = "";
+            if (p1Score > p2Score) {
+                winnerText = "PLAYER 1 WIN!";
+            } else if (p2Score > p1Score) {
+                winnerText = "PLAYER 2 WIN!";
+            } else {
+                winnerText = "DRAW GAME";
+            }
+
+            document.getElementById('winner-display').innerText = winnerText;
+            document.getElementById('final-score-display').innerText = `${p1Score}  -  ${p2Score}`;
+            
+            switchScreen('result');
+        }
+    </script>
+</body>
+</html>

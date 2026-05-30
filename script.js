@@ -12,7 +12,7 @@ const body = document.body;
 const sounds = {
     katana: new Audio('./sounds/斬撃1.mp3'),
     taiken: new Audio('./sounds/大剣.mp3'),
-    sabers: new Audio('./sounds/ライトセーバー.mp3') // ここを実ファイルに合わせる
+    sabers: new Audio('./sounds/ライトセーバー.mp3')
 };
 
 function unlockAudio() {
