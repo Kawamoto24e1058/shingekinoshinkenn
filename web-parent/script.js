@@ -55,9 +55,10 @@ const playersState = {
   player2: { prevLeftWristY: null, prevRightWristY: null, lastSwingTime: 0 }
 };
 
+// ── 💡 進捗の滑らかな累積と減衰に対応した最新ステート ──
 const selectionState = {
-  player1: { locked: false, selectedWeapon: null, detectingWeapon: null, poseStartTime: 0, progress: 0 },
-  player2: { locked: false, selectedWeapon: null, detectingWeapon: null, poseStartTime: 0, progress: 0 }
+  player1: { locked: false, selectedWeapon: null, detectingWeapon: null, lastActiveTime: 0, accumulatedTime: 0, progress: 0 },
+  player2: { locked: false, selectedWeapon: null, detectingWeapon: null, lastActiveTime: 0, accumulatedTime: 0, progress: 0 }
 };
 
 // MediaPipe Pose 33点 接続ライン
@@ -72,7 +73,8 @@ const SKELETON_CONNECTIONS = [
 ];
 
 // ── 💡 武器選択用の固定ターゲット座標と半径の定義 ──
-const TARGET_RADIUS = 45; // ターゲット円の半径 (40〜50px)
+const TARGET_RADIUS = 55; // 基本のターゲット円の半径 (55px)
+const KEEP_RADIUS = 95;   // キープ中の許容半径 (95px) - 吸い付き境界シールド
 
 const TARGETS = {
   player1: {
@@ -240,7 +242,7 @@ function animateScore(scoreEl, cardEl, flashEl, flashClass) {
   }
 }
 
-// ── 【超ロバスト判定】肩や顔の見切れに完全対応した100%上半身当たり判定 ──
+// ── 【極限吸い付き判定】減衰付き時間累積方式 ＆ 境界シールド（ヒステリシス）判定 ──
 function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
   try {
     const sel = selectionState[playerKey];
@@ -252,7 +254,7 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
     const rightWrist = pose.keypoints[16];
     const nose = pose.keypoints[0];
 
-    // 肩が映っていなくても、顔や手首の座標からプレイヤー1と2をロバストに特定
+    // 肩の見切れに完全対応した、鼻・手首連携プレイヤー特定フォールバック
     let poseCenterX = 200;
     if (leftShoulder && rightShoulder && leftShoulder.score > 0.2 && rightShoulder.score > 0.2) {
       poseCenterX = (leftShoulder.x + rightShoulder.x) / 2;
@@ -269,17 +271,22 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
     // 当該プレイヤーに割り当てられた固定ターゲット座標を参照
     const t = isP1 ? TARGETS.player1 : TARGETS.player2;
 
+    // 現在吸い付き中の武器かどうかに応じて、判定半径を動的に決定（境界シールド）
+    const getRadius = (weaponKey) => {
+      return (sel.detectingWeapon === weaponKey) ? KEEP_RADIUS : TARGET_RADIUS;
+    };
+
     let currentPoseDetecting = null;
     let debugTargetKp = null;
     let debugWristKp = null;
     let debugWristKp2 = null;
 
     // ── 1. 【ライトセーバー（中）】 ──
-    // 両手首が同時に中央のセーバーの的（黄色）の中に入っていること (スコアしきい値 0.2)
+    const lsRadius = getRadius("lightsaber");
     if (rightWrist && leftWrist && rightWrist.score > 0.2 && leftWrist.score > 0.2) {
       const rDist = Math.hypot(rightWrist.x - t.lightsaber.x, rightWrist.y - t.lightsaber.y);
       const lDist = Math.hypot(leftWrist.x - t.lightsaber.x, leftWrist.y - t.lightsaber.y);
-      if (rDist <= TARGET_RADIUS && lDist <= TARGET_RADIUS) {
+      if (rDist <= lsRadius && lDist <= lsRadius) {
         currentPoseDetecting = "lightsaber";
         debugWristKp = rightWrist;
         debugWristKp2 = leftWrist;
@@ -288,13 +295,13 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
     }
 
     // ── 2. 【大剣（上）】 ──
-    // どちらかの手首が肩の上の大剣の的（赤色）の中に入っていること
+    const gsRadius = getRadius("greatsword");
     if (!currentPoseDetecting) {
-      if (rightWrist && rightWrist.score > 0.2 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= TARGET_RADIUS) {
+      if (rightWrist && rightWrist.score > 0.2 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= gsRadius) {
         currentPoseDetecting = "greatsword";
         debugWristKp = rightWrist;
         debugTargetKp = t.greatsword;
-      } else if (leftWrist && leftWrist.score > 0.2 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= TARGET_RADIUS) {
+      } else if (leftWrist && leftWrist.score > 0.2 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= gsRadius) {
         currentPoseDetecting = "greatsword";
         debugWristKp = leftWrist;
         debugTargetKp = t.greatsword;
@@ -302,13 +309,13 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
     }
 
     // ── 3. 【刀（下）】 ──
-    // どちらかの手首がお腹の刀の的（青色）の中に入っていること
+    const ktRadius = getRadius("sword");
     if (!currentPoseDetecting) {
-      if (rightWrist && rightWrist.score > 0.2 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= TARGET_RADIUS) {
+      if (rightWrist && rightWrist.score > 0.2 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= ktRadius) {
         currentPoseDetecting = "sword";
         debugWristKp = rightWrist;
         debugTargetKp = t.katana;
-      } else if (leftWrist && leftWrist.score > 0.2 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= TARGET_RADIUS) {
+      } else if (leftWrist && leftWrist.score > 0.2 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= ktRadius) {
         currentPoseDetecting = "sword";
         debugWristKp = leftWrist;
         debugTargetKp = t.katana;
@@ -321,13 +328,18 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
       const weaponNameJP = weaponNames[currentPoseDetecting];
 
       if (sel.detectingWeapon === currentPoseDetecting) {
-        const elapsed = Date.now() - sel.poseStartTime;
-        sel.progress = Math.min(100, Math.floor((elapsed / 1500) * 100));
+        // 検知継続：時間経過分を加算
+        const now = Date.now();
+        const dt = now - sel.lastActiveTime;
+        sel.lastActiveTime = now;
+
+        sel.accumulatedTime = Math.min(1500, (sel.accumulatedTime || 0) + dt);
+        sel.progress = Math.min(100, Math.floor((sel.accumulatedTime / 1500) * 100));
 
         regStatusEl.textContent = `${weaponNameJP}の構え... (${sel.progress}%)`;
         regStatusEl.className = "reg-status detecting";
 
-        // 判定吸い付きガイドライン描画
+        // ガイドラインの描画
         if (debugWristKp && debugTargetKp) {
           ctx.beginPath();
           ctx.moveTo(debugWristKp.x, debugWristKp.y);
@@ -341,7 +353,7 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
           ctx.stroke();
         }
 
-        if (elapsed >= 1500) {
+        if (sel.accumulatedTime >= 1500) {
           sel.locked = true;
           sel.selectedWeapon = currentPoseDetecting;
           sel.progress = 100;
@@ -353,21 +365,37 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
           checkAllWeaponsSelected();
         }
       } else {
+        // 新規検知：開始
         sel.detectingWeapon = currentPoseDetecting;
-        sel.poseStartTime = Date.now();
-        sel.progress = 0;
-        regStatusEl.textContent = `${weaponNameJP}の構え... (0%)`;
+        sel.lastActiveTime = Date.now();
+        sel.accumulatedTime = sel.accumulatedTime || 0; // 途中減衰値から引き継ぎ
+        sel.progress = Math.min(100, Math.floor((sel.accumulatedTime / 1500) * 100));
+        
+        regStatusEl.textContent = `${weaponNameJP}の構え... (${sel.progress}%)`;
         regStatusEl.className = "reg-status detecting";
       }
     } else {
-      sel.detectingWeapon = null;
-      sel.poseStartTime = 0;
-      sel.progress = 0;
-      regStatusEl.textContent = "武器の構えを取ってください (大剣/刀/セーバー)";
-      regStatusEl.className = "reg-status";
+      // ターゲットから外れた：蓄積値を徐々に減衰 (外れている間は2倍の速度で減っていく)
+      const now = Date.now();
+      const dt = sel.lastActiveTime ? (now - sel.lastActiveTime) : 0;
+      sel.lastActiveTime = now;
+
+      sel.accumulatedTime = Math.max(0, (sel.accumulatedTime || 0) - dt * 2.0);
+      sel.progress = Math.min(100, Math.floor((sel.accumulatedTime / 1500) * 100));
+
+      if (sel.accumulatedTime > 0 && sel.detectingWeapon) {
+        const weaponNameJP = weaponNames[sel.detectingWeapon];
+        regStatusEl.textContent = `${weaponNameJP}の構え... (${sel.progress}%)`;
+        regStatusEl.className = "reg-status detecting";
+      } else {
+        sel.detectingWeapon = null;
+        sel.progress = 0;
+        regStatusEl.textContent = "武器の構えを取ってください (大剣/刀/セーバー)";
+        regStatusEl.className = "reg-status";
+      }
     }
   } catch (err) {
-    console.log("handleWeaponSelection エラー（安全に握りつぶし）:", err);
+    console.log("handleWeaponSelection エラー:", err);
   }
 }
 
@@ -438,7 +466,7 @@ function processMovementLogics(pose, playerKey) {
 }
 
 // ── 骨格＆デバッグ用の的（サークル）描画メイン ──
-// ⚠️ 骨格の有無やエラーにかかわらず、固定のデバッグ円を「絶対に強制描画」するようリファクタリング
+// ⚠️ 骨格の有無やエラーにかかわらず、固定のデバッグ円を「絶対に強制描画」
 function drawSkeleton(poses) {
   try {
     // 描画エリアの完全クリーン
@@ -481,53 +509,67 @@ function drawSkeleton(poses) {
             }
 
             const isP1 = poseCenterX < 200;
+            const selState = isP1 ? selectionState.player1 : selectionState.player2;
+
+            // 吸い付き中は的の円を大きくするヒステリシス半径
+            const getDrawRadius = (wKey) => {
+              return (selState.detectingWeapon === wKey) ? KEEP_RADIUS : TARGET_RADIUS;
+            };
 
             if (isP1) {
               const t = TARGETS.player1;
-              // ライトセーバー（両手首が的の中、スコア 0.2）
+              const lsRad = getDrawRadius("lightsaber");
+              const gsRad = getDrawRadius("greatsword");
+              const ktRad = getDrawRadius("sword");
+
+              // ライトセーバー（両手首が的の中）
               if (rightWrist && leftWrist && rightWrist.score > 0.2 && leftWrist.score > 0.2) {
                 const rDist = Math.hypot(rightWrist.x - t.lightsaber.x, rightWrist.y - t.lightsaber.y);
                 const lDist = Math.hypot(leftWrist.x - t.lightsaber.x, leftWrist.y - t.lightsaber.y);
-                if (rDist <= TARGET_RADIUS && lDist <= TARGET_RADIUS) {
+                if (rDist <= lsRad && lDist <= lsRad) {
                   p1LS_Active = true;
                 }
               }
               // 大剣 (右手首 or 左手首)
-              if (rightWrist && rightWrist.score > 0.2 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= TARGET_RADIUS) {
+              if (rightWrist && rightWrist.score > 0.2 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= gsRad) {
                 p1GS_Active = true;
               }
-              if (leftWrist && leftWrist.score > 0.2 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= TARGET_RADIUS) {
+              if (leftWrist && leftWrist.score > 0.2 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= gsRad) {
                 p1GS_Active = true;
               }
               // 刀 (右手首 or 左手首)
-              if (rightWrist && rightWrist.score > 0.2 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= TARGET_RADIUS) {
+              if (rightWrist && rightWrist.score > 0.2 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= ktRad) {
                 p1KT_Active = true;
               }
-              if (leftWrist && leftWrist.score > 0.2 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= TARGET_RADIUS) {
+              if (leftWrist && leftWrist.score > 0.2 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= ktRad) {
                 p1KT_Active = true;
               }
             } else {
               const t = TARGETS.player2;
+              const lsRad = getDrawRadius("lightsaber");
+              const gsRad = getDrawRadius("greatsword");
+              const ktRad = getDrawRadius("sword");
+
               // ライトセーバー
               if (rightWrist && leftWrist && rightWrist.score > 0.2 && leftWrist.score > 0.2) {
                 const rDist = Math.hypot(rightWrist.x - t.lightsaber.x, rightWrist.y - t.lightsaber.y);
                 const lDist = Math.hypot(leftWrist.x - t.lightsaber.x, leftWrist.y - t.lightsaber.y);
-                if (rDist <= TARGET_RADIUS && lDist <= TARGET_RADIUS) {
+                if (rDist <= lsRad && lDist <= lsRad) {
                   p2LS_Active = true;
                 }
               }
               // 大剣
-              if (rightWrist && rightWrist.score > 0.2 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= TARGET_RADIUS) {
+              if (rightWrist && rightWrist.score > 0.2 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= gsRad) {
                 p2GS_Active = true;
               }
-              if (leftWrist && leftWrist.score > 0.2 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= TARGET_RADIUS) {
+              if (leftWrist && leftWrist.score > 0.2 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= gsRad) {
                 p2GS_Active = true;
               }
               // 刀
-              if (rightWrist && rightWrist.score > 0.2 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= TARGET_RADIUS) {
+              if (rightWrist && rightWrist.score > 0.2 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= ktRad) {
                 p2KT_Active = true;
               }
-              if (leftWrist && leftWrist.score > 0.2 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= TARGET_RADIUS) {
+              if (leftWrist && leftWrist.score > 0.2 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= ktRad) {
                 p2KT_Active = true;
               }
             }
@@ -538,13 +580,16 @@ function drawSkeleton(poses) {
       }
 
       // ── 🎯 ターゲット円を描画する内部関数 ──
-      const drawTargetCircle = (center, active, defaultFill, defaultStroke, label) => {
+      const drawTargetCircle = (center, active, defaultFill, defaultStroke, label, weaponKey, pKey) => {
         try {
+          const sel = selectionState[pKey];
+          const radius = (sel.detectingWeapon === weaponKey) ? KEEP_RADIUS : TARGET_RADIUS;
+
           ctx.beginPath();
-          ctx.arc(center.x, center.y, TARGET_RADIUS, 0, 2 * Math.PI);
+          ctx.arc(center.x, center.y, radius, 0, 2 * Math.PI);
           ctx.fillStyle = active ? 'rgba(46, 204, 113, 0.35)' : defaultFill;
           ctx.strokeStyle = active ? '#2ecc71' : defaultStroke;
-          ctx.lineWidth = 3.5;
+          ctx.lineWidth = active ? 4.5 : 3.5;
           ctx.fill();
           ctx.stroke();
 
@@ -556,25 +601,25 @@ function drawSkeleton(poses) {
           ctx.shadowBlur = 4;
           ctx.shadowColor = "black";
           ctx.textAlign = "center";
-          ctx.fillText(label, -center.x, center.y - TARGET_RADIUS - 6);
+          ctx.fillText(label, -center.x, center.y - radius - 6);
           ctx.restore();
         } catch (circleErr) {}
       };
 
       // 【大剣の的（赤色）】: 画面の左右上部（固定座標）
-      drawTargetCircle(TARGETS.player1.greatsword, p1GS_Active, 'rgba(231, 76, 60, 0.18)', '#e74c3c', "P1 大剣 (赤)");
-      drawTargetCircle(TARGETS.player2.greatsword, p2GS_Active, 'rgba(231, 76, 60, 0.18)', '#e74c3c', "P2 大剣 (赤)");
+      drawTargetCircle(TARGETS.player1.greatsword, p1GS_Active, 'rgba(231, 76, 60, 0.18)', '#e74c3c', "P1 大剣 (赤)", "greatsword", "player1");
+      drawTargetCircle(TARGETS.player2.greatsword, p2GS_Active, 'rgba(231, 76, 60, 0.18)', '#e74c3c', "P2 大剣 (赤)", "greatsword", "player2");
 
       // 【刀の的（青色）】: 画面の左右下部（固定座標）
-      drawTargetCircle(TARGETS.player1.katana, p1KT_Active, 'rgba(52, 152, 219, 0.18)', '#3498db', "P1 刀 (青)");
-      drawTargetCircle(TARGETS.player2.katana, p2KT_Active, 'rgba(52, 152, 219, 0.18)', '#3498db', "P2 刀 (青)");
+      drawTargetCircle(TARGETS.player1.katana, p1KT_Active, 'rgba(52, 152, 219, 0.18)', '#3498db', "P1 刀 (青)", "sword", "player1");
+      drawTargetCircle(TARGETS.player2.katana, p2KT_Active, 'rgba(52, 152, 219, 0.18)', '#3498db', "P2 刀 (青)", "sword", "player2");
 
       // 【ライトセーバーの的（黄色）】: 画面の中央（固定座標）
-      drawTargetCircle(TARGETS.player1.lightsaber, p1LS_Active, 'rgba(241, 196, 15, 0.18)', '#f1c40f', "P1 セーバー (黄)");
-      drawTargetCircle(TARGETS.player2.lightsaber, p2LS_Active, 'rgba(241, 196, 15, 0.18)', '#f1c40f', "P2 セーバー (黄)");
+      drawTargetCircle(TARGETS.player1.lightsaber, p1LS_Active, 'rgba(241, 196, 15, 0.18)', '#f1c40f', "P1 セーバー (黄)", "lightsaber", "player1");
+      drawTargetCircle(TARGETS.player2.lightsaber, p2LS_Active, 'rgba(241, 196, 15, 0.18)', '#f1c40f', "P2 セーバー (黄)", "lightsaber", "player2");
     }
 
-    // ── 骨格線 ＆ キーポイント描画 (肩の見切れがあっても描画ガードを排除して強制表示) ──
+    // ── 骨格線 ＆ キーポイント描画 (肩の見切れがあっても描画ガードを完全に排除して強制表示) ──
     if (poses && poses.length > 0) {
       poses.forEach((pose) => {
         if (pose.score < 0.2) return; // 判定閾値を 0.2 に引き下げ
@@ -604,7 +649,7 @@ function drawSkeleton(poses) {
           const regStatusEl = isPlayer1 ? p1RegStatusEl : p2RegStatusEl;
           const cardEl = isPlayer1 ? p1Card : p2Card;
 
-          // 骨格接続線の描画 (各点が 0.2 以上あれば肩なしでも描画)
+          // 骨格接続線の描画 (各点が 0.2 以上あれば肩なしでも繋がっている部分を描画)
           SKELETON_CONNECTIONS.forEach(([i, j]) => {
             try {
               const kp1 = pose.keypoints[i];
@@ -699,11 +744,8 @@ function resetSelectionIfAbsent(playerKey, regStatusEl, cardEl) {
   try {
     const sel = selectionState[playerKey];
     if (!sel.locked && sel.detectingWeapon) {
-      sel.detectingWeapon = null;
-      sel.poseStartTime = 0;
-      sel.progress = 0;
-      regStatusEl.textContent = "カメラに映ってください";
-      regStatusEl.className = "reg-status";
+      // 瞬時にリセットせず、lastActiveTime を更新して減衰に任せることで誤リセットを防ぐ
+      sel.lastActiveTime = Date.now();
     }
   } catch (e) {}
 }
