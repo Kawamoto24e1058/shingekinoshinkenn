@@ -658,7 +658,7 @@ async function initPoseBattleSystem() {
   try {
     // MediaPipe Pose (BlazePose Heavy) を超高精度・ガチガチ設定で初期化
     detector = await poseDetection.createDetector(
-      poseDetection.SupportedModels.MediaPipePose,
+      poseDetection.SupportedModels.BlazePose,               // BlazePose に修正
       {
         runtime: 'mediapipe',
         modelComplexity: 2,               // 最上位超高精度モデル (Heavy)
