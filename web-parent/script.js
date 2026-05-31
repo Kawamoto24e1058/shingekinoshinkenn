@@ -671,7 +671,8 @@ function processMovementLogics(pose, playerKey) {
       if (dyRight > maxNormalizedDY) maxNormalizedDY = dyRight;
     }
 
-    if (maxNormalizedDY > 0.09) {
+    // しきい値を 0.13 に引き上げ、手を上にあげる際の微小なブレ誤検知を完全に防ぐ
+    if (maxNormalizedDY > 0.13) {
       handleGlobalSwing(playerKey);
     }
 
