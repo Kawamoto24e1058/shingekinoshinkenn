@@ -81,12 +81,27 @@ enum WeaponType: String, CaseIterable, Identifiable {
         }
     }
 
-    /// 同じ振りで多重発火しないためのデバウンス（秒）
+    /// 同じ振りで多重発火しないためのデバウンス（秒）。
+    /// ヒステリシス（下記 swingReleaseThreshold）と併用する二段構えの保険。
     var swingDebounce: TimeInterval {
         switch self {
         case .lightsaber: return 0.25
         case .greatsword: return 0.45  // 重い余韻が落ち着くまで次は鳴らさない
         case .smallsword: return 0.12  // 連撃が効くように短く
+        }
+    }
+
+    /// 振り検出の「解除（再武装）」しきい値（g）。
+    ///
+    /// 1 回の振りは g が swingThreshold を上回って山を作り、やがて下がる。
+    /// 発火後はこの値を**下回る**まで次を発火させない（ヒステリシス）。
+    /// これにより「しきい値付近で g がばたついて 1 振りが複数回鳴る」「上回り続けて
+    /// 鳴りっぱなしになる」のを防ぐ。swingThreshold より十分低くするのが要点。
+    var swingReleaseThreshold: Double {
+        switch self {
+        case .lightsaber: return 1.0   // 1.3 で発火、1.0 を切れば即再武装（振り続けると鳴りやすい）
+        case .greatsword: return 1.45  // 1.8 で発火、1.45 で再武装（重い武器でも連打を効かせる）
+        case .smallsword: return 0.68  // 0.9 で発火、0.68 で再武装（軽快に連撃）
         }
     }
 

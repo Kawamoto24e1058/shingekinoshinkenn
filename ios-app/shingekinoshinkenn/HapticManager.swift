@@ -32,6 +32,10 @@ final class HapticManager: ObservableObject {
     private var engine: CHHapticEngine?
     private var humPlayer: CHHapticAdvancedPatternPlayer?
     private var lastSwingTime: Date = .distantPast
+    /// 振り検出の「武装」状態。true のときだけ次の振りを発火できる。
+    /// 発火すると false になり、加速度が swingReleaseThreshold を下回ると true に戻る。
+    /// これで「1 振り＝1 発火」を保証する（ヒステリシス／エッジ検出）。
+    private var isSwingArmed: Bool = true
     private var swingAudioResources: [WeaponType: CHHapticAudioResourceID] = [:]
     private let logger = Logger(subsystem: "shingekinoshinkenn", category: "Haptics")
 
@@ -169,15 +173,26 @@ final class HapticManager: ObservableObject {
             logger.debug("🪶 updateMotion: ⚠️ humPlayer が nil（ハム未再生）g=\(g, privacy: .public)")
         }
 
-        if g >= weapon.swingThreshold {
+        // 振り検出：エッジ検出 + ヒステリシス。
+        // - 武装中(isSwingArmed)に g が swingThreshold を上抜けした「立ち上がり」で 1 回だけ発火。
+        // - 発火後は武装解除し、g が swingReleaseThreshold を下回るまで再発火しない。
+        //   → 1 振りで g がしきい値付近を上下しても、また上回り続けても、鳴るのは 1 回だけ。
+        // - swingDebounce は最短間隔の保険（解除が速すぎる場合の連打防止）。
+        if isSwingArmed {
             let now = Date()
-            if now.timeIntervalSince(lastSwingTime) >= weapon.swingDebounce {
+            if g >= weapon.swingThreshold,
+               now.timeIntervalSince(lastSwingTime) >= weapon.swingDebounce {
+                isSwingArmed = false // 立ち上がりで発火 → 解除されるまで武装解除
                 lastSwingTime = now
                 let span = max(accelerationNormalizationCeiling - weapon.swingThreshold, 0.0001)
                 let boost = Float(min((g - weapon.swingThreshold) / span, 1.0))
                 logger.notice("🪶 🎯 振り検出! g=\(String(format: "%.2f", g), privacy: .public) threshold=\(weapon.swingThreshold, privacy: .public) boost=\(String(format: "%.2f", boost), privacy: .public)")
                 playSwing(weapon: weapon, boost: boost)
             }
+        } else if g < weapon.swingReleaseThreshold {
+            // 加速度が十分落ちた＝振り終わり。次の振りに備えて再武装する。
+            isSwingArmed = true
+            logger.debug("🪶 ↩️ 再武装 g=\(String(format: "%.2f", g), privacy: .public) < release=\(weapon.swingReleaseThreshold, privacy: .public)")
         }
     }
 
