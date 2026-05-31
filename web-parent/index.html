@@ -3,14 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SHINGEKI NO SHINKEN - BATTLE PANEL</title>
+    <title>真実真剣 (REAL FIGHT) - BATTLE PANEL</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Noto+Sans+JP:wght@500;900&display=swap" rel="stylesheet">
-    <!-- MediaPipe Pose ＆ Camera 公式 SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <!-- TensorFlow.js ＆ MoveNet MultiPose 超高速2人同時骨格追跡エンジン -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.12.0/dist/tf-core.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.12.0/dist/tf-converter.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.12.0/dist/tf-backend-webgl.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js" crossorigin="anonymous"></script>
     <style>
+        /* --- 近未来的なルビ (Real Fight) スタイル --- */
+        ruby {
+            ruby-position: over;
+        }
+        rt {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.3em;
+            letter-spacing: 0.15em;
+            color: #ffffff;
+            text-transform: uppercase;
+            /* 親要素のグラデーションテキストの影響を完全に遮断 */
+            background: none !important;
+            -webkit-background-clip: initial !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 0 8px rgba(255, 255, 255, 0.6) !important;
+            padding-bottom: 4px;
+        }
+
         /* --- 共通の近未来スタジアム背景 --- */
         :root {
             --neon-cyan: #00f2fe;
@@ -98,9 +118,9 @@
         .guide-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 40px;
+            gap: 24px;
             width: 100%;
-            max-width: 980px;
+            max-width: 960px;
             margin: 0 auto;
         }
         .panel {
@@ -108,16 +128,16 @@
             border: 2px solid #324665;
             border-top: 4px solid #00f2fe;
             border-radius: 12px;
-            padding: 40px;
+            padding: 24px 28px;
             box-shadow: 0 20px 50px rgba(0,0,0,0.8);
         }
         .panel-title {
             font-family: 'Orbitron', sans-serif;
-            font-size: 1.6rem;
+            font-size: 1.35rem;
             font-weight: 900;
-            margin-bottom: 25px;
+            margin-bottom: 15px;
             border-bottom: 2px solid rgba(0, 242, 254, 0.3);
-            padding-bottom: 10px;
+            padding-bottom: 8px;
             color: #00f2fe;
             display: flex;
             justify-content: space-between;
@@ -125,31 +145,32 @@
         }
         .panel-title span { font-size: 1rem; color: #aaa; }
 
-        .rule-box { margin-bottom: 25px; }
-        .rule-box h4 { color: #ccff00; margin-bottom: 8px; font-size: 1.2rem; }
-        .rule-box p { font-size: 1rem; color: #ddd; line-height: 1.6; margin: 0; }
+        .rule-box { margin-bottom: 12px; }
+        .rule-box h4 { color: #ccff00; margin-bottom: 4px; font-size: 1.05rem; }
+        .rule-box p { font-size: 0.9rem; color: #ddd; line-height: 1.5; margin: 0; }
 
-        .weapon-list { display: flex; flex-direction: column; gap: 20px; }
+        .weapon-list { display: flex; flex-direction: column; gap: 12px; }
         .weapon-card {
             background: rgba(255,255,255,0.02);
             border-left: 6px solid #fff;
-            padding: 20px;
+            padding: 12px 15px;
             border-radius: 0 8px 8px 0;
             border: 1px solid rgba(255,255,255,0.05);
         }
         .weapon-card.katana { border-left-color: #ff416c; }
         .weapon-card.taiken { border-left-color: #ffaa00; }
         .weapon-card.saber { border-left-color: #00f2fe; }
-        .weapon-name { font-weight: 900; font-size: 1.3rem; margin-bottom: 5px; }
-        .weapon-desc { font-size: 0.95rem; color: #b5c2d5; line-height: 1.5; }
+        .weapon-name { font-weight: 900; font-size: 1.1rem; margin-bottom: 4px; }
+        .weapon-desc { font-size: 0.85rem; color: #b5c2d5; line-height: 1.4; }
 
         .selection-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 430px; /* 中央のWebカメラモニター用にマージンを広く確保 */
+            gap: 520px; /* カメラの幅 (520px) に完全に合わせて重なりを防ぎ中央配置 */
             width: 100%;
             max-width: 1300px;
             margin-bottom: 10px;
+            justify-content: center; /* 完全に左右対称に中央寄せ */
         }
         .selection-panel {
             background: linear-gradient(180deg, rgba(5, 12, 23, 0.95) 0%, rgba(8, 14, 26, 0.98) 100%);
@@ -237,9 +258,9 @@
             text-align: center;
         }
         .start-title {
-            font-family: 'Orbitron', sans-serif;
+            font-family: 'Orbitron', 'Noto Sans JP', sans-serif;
             font-size: 4rem;
-            letter-spacing: 0.2em;
+            letter-spacing: 0.1em;
             margin-bottom: 10px;
             color: #00f2fe;
             text-shadow: 0 0 25px rgba(0, 242, 254, 0.4);
@@ -417,7 +438,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            width: 440px;
+            width: 520px; /* 横幅を 440px から 520px へ拡大 */
             gap: 15px;
             z-index: 50;
             pointer-events: none; /* 下のボタンをクリックできるように */
@@ -426,8 +447,8 @@
 
         .monitor-border {
             position: relative;
-            width: 400px;
-            height: 300px;
+            width: 480px; /* 横幅を 400px から 480px へ一回り拡大 */
+            height: 360px; /* 縦幅を 300px から 360px へ拡大 (4:3アスペクト比維持) */
             border-radius: 20px;
             padding: 5px;
             background: linear-gradient(135deg, var(--neon-cyan) 0%, var(--neon-magenta) 100%);
@@ -547,12 +568,12 @@
         }
 
         .setup-card h2 {
-            font-family: 'Orbitron', sans-serif;
+            font-family: 'Orbitron', 'Noto Sans JP', sans-serif;
             font-size: 2rem;
             margin-bottom: 15px;
             font-weight: 900;
             color: #00f2fe;
-            letter-spacing: 2px;
+            letter-spacing: 1px;
         }
 
         .setup-card p {
@@ -597,10 +618,10 @@
         }
 
         .game-title {
-            font-family: 'Orbitron', sans-serif;
+            font-family: 'Orbitron', 'Noto Sans JP', sans-serif;
             font-size: 2.2rem;
             font-weight: 900;
-            letter-spacing: 4px;
+            letter-spacing: 2px;
             text-transform: uppercase;
             background: linear-gradient(to right, var(--neon-cyan), #ffffff, var(--neon-magenta));
             -webkit-background-clip: text;
@@ -651,17 +672,406 @@
         .hidden {
             display: none !important;
         }
+
+        /* 💀 UNDERTALE風 攻撃スラッシュエフェクト */
+        .undertale-slash {
+            position: absolute;
+            overflow: visible;
+        }
+
+        .undertale-slash-line {
+            position: absolute;
+            top: 50%;
+            left: -20%;
+            width: 140%;
+            height: 6px;
+            background-color: #ffffff;
+            box-shadow: 0 0 15px #ffffff, 0 0 5px #00f2fe;
+            transform: translateY(-50%) rotate(-15deg) scaleX(0);
+            transform-origin: center;
+            border-radius: 10px;
+            animation: undertaleSlice 0.35s cubic-bezier(0.15, 0.85, 0.3, 1) forwards;
+        }
+
+        @keyframes undertaleSlice {
+            0% {
+                transform: translateY(-50%) rotate(-15deg) scaleX(0);
+                opacity: 0;
+            }
+            15% {
+                transform: translateY(-50%) rotate(-15deg) scaleX(1.2);
+                opacity: 1;
+                height: 12px;
+            }
+            50% {
+                transform: translateY(-50%) rotate(-15deg) scaleX(1.0);
+                opacity: 1;
+                height: 4px;
+            }
+            100% {
+                transform: translateY(-50%) rotate(-15deg) scaleX(0.9);
+                opacity: 0;
+                height: 0px;
+            }
+        }
+
+        /* ボタン被弾時のブレ（シェイク）アニメーション */
+        .undertale-hit-shake {
+            animation: undertaleShake 0.3s ease-in-out forwards;
+            position: relative;
+        }
+
+        @keyframes undertaleShake {
+            0% { transform: translate(0, 0); filter: brightness(2.0); }
+            10% { transform: translate(-8px, -2px); filter: brightness(2.0); }
+            20% { transform: translate(8px, 2px); }
+            30% { transform: translate(-6px, 1px); }
+            40% { transform: translate(6px, -1px); }
+            50% { transform: translate(-4px, 0); }
+            60% { transform: translate(4px, 0); }
+            80% { transform: translate(-2px, 0); }
+            100% { transform: translate(0, 0); filter: brightness(1.0); }
+        }
+
+        /* ── ⚔️ バトルステージ専用 独立型バトルカードスタイル ── */
+        .battle-arena {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 520px; /* カメラの幅 (520px) に完全に合わせて重なりを防ぎ中央配置 */
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+            z-index: 5;
+            position: relative;
+        }
+
+        .battle-card {
+            flex: 1;
+            max-width: 320px;
+            min-width: 280px;
+            background: linear-gradient(180deg, rgba(16, 23, 37, 0.9) 0%, rgba(8, 12, 21, 0.95) 100%);
+            border: 2px solid #324665;
+            border-radius: 20px;
+            padding: 30px 20px;
+            text-align: center;
+            position: relative;
+            transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            z-index: 10;
+        }
+
+        .battle-card.p1 {
+            border-top: 4px solid var(--neon-cyan);
+            box-shadow: 0 10px 30px rgba(0, 242, 254, 0.15);
+        }
+
+        .battle-card.p2 {
+            border-top: 4px solid var(--neon-magenta);
+            box-shadow: 0 10px 30px rgba(243, 85, 136, 0.15);
+        }
+
+        .player-tag {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+        }
+
+        .p1 .player-tag {
+            color: var(--neon-cyan);
+            text-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+        }
+
+        .p2 .player-tag {
+            color: var(--neon-magenta);
+            text-shadow: 0 0 10px rgba(243, 85, 136, 0.5);
+        }
+
+        .weapon-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            margin-bottom: 20px;
+            color: #cbd7f5;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .weapon-badge.p1 { border-color: rgba(0, 242, 254, 0.3); }
+        .weapon-badge.p2 { border-color: rgba(243, 85, 136, 0.3); }
+
+        .score-display {
+            margin: 10px 0;
+        }
+
+        .vs-divider {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%) skewX(-15deg);
+            z-index: 4;
+            pointer-events: none;
+        }
+
+        .vs-divider .vs-text {
+            color: #4f678c;
+            font-size: 2.5rem;
+            font-style: italic;
+            border: 1px solid #324665;
+            padding: 8px 24px;
+            background: rgba(0,0,0,0.6);
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        /* ── 💀 敗者パネル両断（スライス＆落下）アニメーション ── */
+        .slice-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .slice-piece {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, rgba(16, 23, 37, 0.95) 0%, rgba(8, 12, 21, 0.98) 100%);
+            border: 2px solid #e74c3c;
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.9);
+            pointer-events: none;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 30px 20px;
+            text-align: center;
+        }
+
+        /* クリップパスで右上破片にカット (斜めライン) */
+        .piece-top {
+            clip-path: polygon(0 0, 100% 0, 100% 35%, 0 75%);
+            border-bottom: none;
+            animation: dropPieceTop 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+
+        /* クリップパスで左下破片にカット (斜めライン) */
+        .piece-bottom {
+            clip-path: polygon(0 75%, 100% 35%, 100% 100%, 0 100%);
+            border-top: none;
+            animation: dropPieceBottom 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+
+        @keyframes dropPieceTop {
+            0% {
+                transform: translate(0, 0) rotate(0deg);
+                opacity: 1;
+            }
+            20% {
+                transform: translate(-10px, -5px) rotate(-2deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(-120px, 900px) rotate(-35deg) scale(0.9);
+                opacity: 0;
+            }
+        }
+
+        @keyframes dropPieceBottom {
+            0% {
+                transform: translate(0, 0) rotate(0deg);
+                opacity: 1;
+            }
+            20% {
+                transform: translate(15px, 10px) rotate(3deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(180px, 900px) rotate(45deg) scale(0.85);
+                opacity: 0;
+            }
+        }
+
+        /* ── 👑 勝者パネル プレミアム祝福演出 ── */
+        .battle-card.winner-active {
+            transform: scale(1.08) translateY(-35px);
+            z-index: 200;
+            border-width: 3px;
+        }
+
+        .battle-card.p1.winner-active {
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 60px rgba(0, 242, 254, 0.8), inset 0 0 20px rgba(0, 242, 254, 0.3);
+            animation: winnerPulseCyan 1.5s infinite alternate;
+        }
+
+        .battle-card.p2.winner-active {
+            border-color: var(--neon-magenta);
+            box-shadow: 0 0 60px rgba(243, 85, 136, 0.8), inset 0 0 20px rgba(243, 85, 136, 0.3);
+            animation: winnerPulseMagenta 1.5s infinite alternate;
+        }
+
+        @keyframes winnerPulseCyan {
+            0% { box-shadow: 0 0 40px rgba(0, 242, 254, 0.6); }
+            100% { box-shadow: 0 0 80px rgba(0, 242, 254, 1.0), 0 0 30px #fff; }
+        }
+
+        @keyframes winnerPulseMagenta {
+            0% { box-shadow: 0 0 40px rgba(243, 85, 136, 0.6); }
+            100% { box-shadow: 0 0 80px rgba(243, 85, 136, 1.0), 0 0 30px #fff; }
+        }
+
+        /* 勝利時のポップアップテキストと王冠 */
+        .winner-banner {
+            position: absolute;
+            top: -65px;
+            left: 50%;
+            transform: translateX(-50%) scale(0);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 900;
+            color: #ffdd59;
+            text-shadow: 0 0 15px rgba(255, 221, 89, 0.8), 0 0 30px rgba(255, 221, 89, 0.4);
+            white-space: nowrap;
+            animation: bannerPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.5s forwards;
+            z-index: 210;
+        }
+
+        @keyframes bannerPop {
+            0% { transform: translateX(-50%) scale(0); }
+            70% { transform: translateX(-50%) scale(1.2); }
+            100% { transform: translateX(-50%) scale(1.0); }
+        }
+
+        /* 引き分け（DRAW）サイン */
+        .draw-banner {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 5rem;
+            font-weight: 900;
+            color: #ffffff;
+            text-shadow: 0 0 20px rgba(255,255,255,0.8), 0 0 40px rgba(0, 242, 254, 0.5);
+            z-index: 300;
+            animation: drawPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards, drawBlink 1.0s infinite alternate 0.6s;
+            pointer-events: none;
+        }
+
+        @keyframes drawPop {
+            0% { transform: translate(-50%, -50%) scale(0); }
+            100% { transform: translate(-50%, -50%) scale(1.0); }
+        }
+
+        @keyframes drawBlink {
+            0% { opacity: 0.7; }
+            100% { opacity: 1.0; filter: brightness(1.2); }
+        }
+
+        /* ── 🙌 ホーム戻り案内バナースタイル ── */
+        .home-return-banner {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%) scale(0);
+            background: linear-gradient(135deg, rgba(16, 23, 37, 0.95) 0%, rgba(8, 12, 21, 0.98) 100%);
+            border: 2px solid var(--neon-cyan);
+            box-shadow: 0 0 25px rgba(0, 242, 254, 0.4);
+            border-radius: 12px;
+            padding: 15px 40px;
+            font-family: 'Space Grotesk', 'Noto Sans JP', sans-serif;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #ffffff;
+            text-align: center;
+            z-index: 250;
+            pointer-events: none;
+            white-space: nowrap;
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .home-return-banner.active {
+            transform: translateX(-50%) scale(1.0);
+        }
+        .home-return-progress {
+            display: block;
+            font-size: 0.9rem;
+            color: var(--neon-yellow);
+            margin-top: 5px;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        /* 📸 カメラフラッシュエフェクト */
+        .photo-flash {
+            animation: cameraFlash 0.15s ease-out forwards;
+        }
+        @keyframes cameraFlash {
+            0% { filter: brightness(3.0); background-color: #ffffff; }
+            100% { filter: brightness(1.0); }
+        }
+
+        /* 👑 勝者写真 脈動する金色のネオンエフェクト */
+        .winner-photo-neon {
+            border: 3px solid #fff;
+            box-shadow: 0 0 10px #fff, 0 0 20px #ffd700, 0 0 30px #ffd700, 0 0 40px #ff8c00;
+            animation: pulseNeon 1.5s infinite alternate;
+            border-radius: 12px;
+            max-width: 165px;
+            height: 195px;
+            object-fit: cover;
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: block;
+            margin: 6px auto 0;
+        }
+        @keyframes pulseNeon {
+            from { box-shadow: 0 0 10px #fff, 0 0 20px #ffd700, 0 0 30px #ffd700; }
+            to { box-shadow: 0 0 15px #fff, 0 0 30px #ff8c00, 0 0 45px #ff4500, 0 0 60px #ff4500; }
+        }
+
+        /* 勝者写真ポップアップ表示コンテナ */
+        .winner-photo-container {
+            margin-top: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .winner-photo-container.active {
+            opacity: 1;
+            transform: scale(1.0);
+        }
+        .winner-photo-title {
+            font-family: 'Orbitron', 'Space Grotesk', sans-serif;
+            font-size: 0.95rem;
+            color: #ffd700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            margin-bottom: 5px;
+            letter-spacing: 2px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body onclick="unlockAudio()">
 
-    <!-- Audio Activation Notice Overlay -->
-    <div id="audioNotice">📢 【SYSTEM】 最初に画面をクリックしてアクティベート</div>
+
 
     <!-- Camera Auth State & Start Battle Button Overlay -->
     <div id="setup-overlay" class="setup-overlay">
         <div class="setup-card">
-            <h2>SHINGEKI NO SHINKEN</h2>
+            <h2><ruby>真実真剣<rt>REAL FIGHT</rt></ruby></h2>
             <p>
                 本システムはWebカメラを用いて全身骨格をリアルタイムに検知し、バトルを行います。<br><br>
                 「カメラの開始」ボタンを押してカメラの利用を許可してください。画面に描画される骨格線（ワイヤーフレーム）を目視して動作をデバッグできます。
@@ -675,7 +1085,7 @@
 
     <!-- Header Section -->
     <header>
-        <h1 class="game-title">SHINGEKI NO SHINKEN</h1>
+        <h1 class="game-title"><ruby>真実真剣<rt>REAL FIGHT</rt></ruby></h1>
         <div id="game-phase-title" class="subtitle" style="margin-top: 5px;">フェーズ：武器選択中</div>
     </header>
 
@@ -688,14 +1098,14 @@
             </div>
             <div class="timer-box-horizontal">
                 <div class="timer-label">残り時間</div>
-                <div id="game-timer" class="timer-num">90</div>
+                <div id="game-timer" class="timer-num">30</div>
             </div>
         </div>
 
         <!-- 1. スタート画面 -->
         <div id="startScreen" class="screen active">
             <div class="start-panel">
-                <div class="start-title">SHINGEKI NO SHINKEN</div>
+                <div class="start-title"><ruby>真実真剣<rt>REAL FIGHT</rt></ruby></div>
                 <div class="start-subtitle">Cyber Skeleton Battle</div>
                 <div class="start-copy">
                     ルール説明の前に、まずは構えを整えよう。<br>
@@ -814,17 +1224,34 @@
         <!-- 4. バトルステージ画面 -->
         <div id="battleScreen" class="screen">
             <div class="subtitle" id="battleStageSubtitle">BATTLE STAGE</div>
-            <div class="scoreboard">
-                <div class="team-label label-p1">PLAYER 1</div>
-                <span id="p1Score" class="score-num">0</span>
-                <span class="vs-text">VS</span>
-                <span id="p2Score" class="score-num">0</span>
-                <div class="team-label label-p2">PLAYER 2</div>
-            </div>
             
-            <div class="weapon-preview">
-                <div class="preview-item p1">P1 武器: <span id="battleWeaponP1">未確定</span></div>
-                <div class="preview-item p2">P2 武器: <span id="battleWeaponP2">未確定</span></div>
+            <div class="battle-arena">
+                <!-- PLAYER 1 BATTLE CARD -->
+                <div class="battle-card p1" id="p1-battle-card">
+                    <div class="card-glow"></div>
+                    <div class="player-tag">PLAYER 1</div>
+                    <div class="weapon-badge p1">P1 武器: <span id="battleWeaponP1">未確定</span></div>
+                    <div class="score-display">
+                        <span id="p1Score" class="score-num">0</span>
+                    </div>
+                    <div class="score-label">SLASH COUNT</div>
+                </div>
+
+                <!-- VS DIVIDER -->
+                <div class="vs-divider" id="vs-divider">
+                    <span class="vs-text">VS</span>
+                </div>
+
+                <!-- PLAYER 2 BATTLE CARD -->
+                <div class="battle-card p2" id="p2-battle-card">
+                    <div class="card-glow"></div>
+                    <div class="player-tag">PLAYER 2</div>
+                    <div class="weapon-badge p2">P2 武器: <span id="battleWeaponP2">未確定</span></div>
+                    <div class="score-display">
+                        <span id="p2Score" class="score-num">0</span>
+                    </div>
+                    <div class="score-label">SLASH COUNT</div>
+                </div>
             </div>
 
             <!-- フルスクリーンの斬撃閃光エフェクト要素 -->
