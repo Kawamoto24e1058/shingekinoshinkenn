@@ -75,7 +75,8 @@ struct ContentView: View {
 
     private var accelerationGauge: some View {
         let mag = motion.accelerationMagnitude
-        let ratio = min(mag / 2.5, 1.0)
+        let ceiling = 2.5
+        let ratio = min(mag / ceiling, 1.0)
         let threshold = selectedWeapon.swingThreshold
         let isSwinging = mag >= threshold
         return VStack(spacing: 8) {
@@ -93,7 +94,7 @@ struct ContentView: View {
                     Rectangle()
                         .fill(.orange)
                         .frame(width: 2)
-                        .offset(x: geo.size.width * (threshold / 2.5) - 1)
+                        .offset(x: geo.size.width * (threshold / ceiling) - 1)
                 }
             }
             .frame(height: 14)

@@ -33,12 +33,13 @@ final class MotionManager: ObservableObject {
     func start(onUpdate: @escaping @MainActor (Double) -> Void) {
         guard isAvailable, !motion.isDeviceMotionActive else { return }
         motion.startDeviceMotionUpdates(to: .main) { [weak self] data, _ in
-            guard let data else { return }
+            guard let self, let data else { return }
             let a = data.userAcceleration
             let mag = (a.x * a.x + a.y * a.y + a.z * a.z).squareRoot()
-            // `.main` キューで呼ばれるので、メインアクター上にいることを表明する。
-            MainActor.assumeIsolated {
-                self?.accelerationMagnitude = mag
+            // self 解放後にコールバックだけ呼ばれるケースは上の guard で弾く。
+            // MainActor へは Task で確実に戻す（assumeIsolated は実行コンテキスト次第で未定義動作になり得る）。
+            Task { @MainActor in
+                self.accelerationMagnitude = mag
                 onUpdate(mag)
             }
         }

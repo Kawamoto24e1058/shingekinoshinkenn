@@ -88,7 +88,7 @@
   |         | `players.{playerId}.drawnAt`   | ISO8601 文字列 |
 
 - Firebase SDK はまだ使わず、`URLSession` だけで動かす簡易版。
-- ローカルに `ios-app/shingekinoshinkenn/FirestoreConfig.plist` を作り、`FirestoreConfig.example.plist` と同じキーで実値を入れる。
+- ローカルに `ios-app/shingekinoshinkenn/FirestoreConfig.plist` を作り、`FirestoreConfig.example.plist` と同じキーで実値を入れる（**Xcode の Target に追加して Copy Bundle Resources に入れる**。`FirestoreConfig.load()` は `Bundle.main` から読むため、含めないと常に `missingFile` になる）。
 - `FirestoreConfig.plist` は `.gitignore` 対象。公開リポジトリには入れない。
 - Firestore ルールがテストモード等で未認証書き込みを許可していない場合は `HTTP 403` になる。
 - 次の段階：上記ボタンの呼び出し元を CoreMotion の検知ロジックに差し替え、構え／抜刀の自動送信に切り替える。
@@ -165,6 +165,28 @@
 - 現在 Xcode project に登録されている音源は、`ios-app/ライトセーバ.mp3` の 1 つ。
 - `WeaponType.swingAudioFilename` は Bundle ルート直下の `ライトセーバ.mp3` を直接参照する。
 - このファイルがない環境ではライトセーバーの振り音は登録されない。ハプティクス自体は鳴る。
+
+#### ファイル名・パスの対応（参照は壊れていない）
+
+ファイル名が `ライトセーバ.mp3`（ディスク上は `ios-app/ライトセーバ.mp3`）になっているが、
+**Xcode は `ios-app/` をルートとして開く前提**なので参照は正しく解決される。各レイヤーの対応は次の通り：
+
+| レイヤー | 参照 | 基準 | 解決先 |
+|----------|------|------|--------|
+| ディスク | — | — | `ios-app/ライトセーバ.mp3` |
+| `.xcodeproj` の場所 | — | — | `ios-app/shingekinoshinkenn.xcodeproj` |
+| pbxproj `mainGroup` | `sourceTree = "<group>"` | `.xcodeproj` の親 = `ios-app/` | `ios-app/` |
+| pbxproj fileRef | `path = "ライトセーバ.mp3"; sourceTree = "<group>"` | mainGroup = `ios-app/` | `ios-app/ライトセーバ.mp3` ✅ |
+| ビルド（Copy Bundle Resources） | `ライトセーバ.mp3` | — | アプリ Bundle ルート直下 |
+| Swift（`WeaponType.swift`） | `Bundle.main.bundleURL.appendingPathComponent("ライトセーバ.mp3")` | Bundle ルート | Bundle ルート直下の `ライトセーバ.mp3` ✅ |
+
+- つまり「pbxproj の参照名（`ライトセーバ.mp3`）」と「リポジトリ上の実体（`ios-app/ライトセーバ.mp3`）」は**矛盾していない**。
+  pbxproj の `<group>` 相対パスはプロジェクトルート（`ios-app/`）起点なので、両者は同じファイルを指す。
+- そのため**リネームやファイル移動は不要**。`ios-app/shingekinoshinkenn.xcodeproj` を開いてビルドすれば、
+  mp3 は Bundle ルートにコピーされ、Swift 側の `appendingPathComponent("ライトセーバ.mp3")` で読み込める。
+- 注意：`ios-app/` ではなくリポジトリルート（`shingekinoshinkenn/`）を起点に開いたり、
+  mp3 を別ディレクトリ（例：`ios-app/shingekinoshinkenn/`）へ移すと `<group>` 相対の解決先がずれて参照が壊れる。
+  移動する場合は Xcode 上でドラッグして pbxproj の `path` を更新すること。
 
 ### 4. 今後の音源ファイル規約（SoundManager を作る場合）
 

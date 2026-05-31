@@ -180,15 +180,17 @@ final class HapticManager: ObservableObject {
         //   → 1 振りで g がしきい値付近を上下しても、また上回り続けても、鳴るのは 1 回だけ。
         // - swingDebounce は最短間隔の保険（解除が速すぎる場合の連打防止）。
         if isSwingArmed {
-            let now = Date()
-            if g >= weapon.swingThreshold,
-               now.timeIntervalSince(lastSwingTime) >= weapon.swingDebounce {
-                isSwingArmed = false // 立ち上がりで発火 → 解除されるまで武装解除
-                lastSwingTime = now
-                let span = max(accelerationNormalizationCeiling - weapon.swingThreshold, 0.0001)
-                let boost = Float(min((g - weapon.swingThreshold) / span, 1.0))
-                logger.notice("🪶 🎯 振り検出! g=\(String(format: "%.2f", g), privacy: .public) threshold=\(weapon.swingThreshold, privacy: .public) boost=\(String(format: "%.2f", boost), privacy: .public)")
-                playSwing(weapon: weapon, boost: boost)
+            // しきい値を超えたフレームだけ Date() を生成する（60Hz の無駄な割り当て回避）。
+            if g >= weapon.swingThreshold {
+                let now = Date()
+                if now.timeIntervalSince(lastSwingTime) >= weapon.swingDebounce {
+                    isSwingArmed = false // 立ち上がりで発火 → 解除されるまで武装解除
+                    lastSwingTime = now
+                    let span = max(accelerationNormalizationCeiling - weapon.swingThreshold, 0.0001)
+                    let boost = Float(min((g - weapon.swingThreshold) / span, 1.0))
+                    logger.notice("🪶 🎯 振り検出! g=\(String(format: "%.2f", g), privacy: .public) threshold=\(weapon.swingThreshold, privacy: .public) boost=\(String(format: "%.2f", boost), privacy: .public)")
+                    playSwing(weapon: weapon, boost: boost)
+                }
             }
         } else if g < weapon.swingReleaseThreshold {
             // 加速度が十分落ちた＝振り終わり。次の振りに備えて再武装する。
