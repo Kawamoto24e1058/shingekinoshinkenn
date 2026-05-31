@@ -298,11 +298,18 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
     // ── 2. 【大剣（上）】 ──
     const gsRadius = getRadius("greatsword");
     if (!currentPoseDetecting) {
-      if (rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= gsRadius) {
+      // 💡 大剣の構えの精度向上：手が肩より高い位置（y座標が肩より小さい）にあることを必須条件化！
+      const isRightWristInGS = rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= gsRadius;
+      const isLeftWristInGS = leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= gsRadius;
+      
+      const isRightWristAboveShoulder = rightShoulder && rightWrist && rightWrist.y < rightShoulder.y;
+      const isLeftWristAboveShoulder = leftShoulder && leftWrist && leftWrist.y < leftShoulder.y;
+
+      if (isRightWristInGS && isRightWristAboveShoulder) {
         currentPoseDetecting = "greatsword";
         debugWristKp = rightWrist;
         debugTargetKp = t.greatsword;
-      } else if (leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= gsRadius) {
+      } else if (isLeftWristInGS && isLeftWristAboveShoulder) {
         currentPoseDetecting = "greatsword";
         debugWristKp = leftWrist;
         debugTargetKp = t.greatsword;
@@ -312,11 +319,29 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
     // ── 3. 【刀（下）】 ──
     const ktRadius = getRadius("sword");
     if (!currentPoseDetecting) {
-      if (rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= ktRadius) {
+      // 💡 刀の構えの精度向上：腕をダラーンと下ろした誤検知を防ぐため、「肘が130度以下に曲がっている」ことを必須条件化！
+      const leftElbow = pose.keypoints[13];
+      const rightElbow = pose.keypoints[14];
+      
+      // 右手での刀の構え判定
+      let rightAngle = 180;
+      if (rightShoulder && rightElbow && rightWrist) {
+        rightAngle = getAngle(rightShoulder, rightElbow, rightWrist);
+      }
+      const isRightWristInKatana = rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= ktRadius;
+      
+      // 左手での刀の構え判定
+      let leftAngle = 180;
+      if (leftShoulder && leftElbow && leftWrist) {
+        leftAngle = getAngle(leftShoulder, leftElbow, leftWrist);
+      }
+      const isLeftWristInKatana = leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= ktRadius;
+
+      if (isRightWristInKatana && rightAngle <= 130) {
         currentPoseDetecting = "sword";
         debugWristKp = rightWrist;
         debugTargetKp = t.katana;
-      } else if (leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= ktRadius) {
+      } else if (isLeftWristInKatana && leftAngle <= 130) {
         currentPoseDetecting = "sword";
         debugWristKp = leftWrist;
         debugTargetKp = t.katana;
@@ -551,18 +576,36 @@ function drawSkeleton(poses) {
                   p1LS_Active = true;
                 }
               }
-              // 大剣 (右手首 or 左手首)
-              if (rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= gsRad) {
+              // 大剣 (右手首 or 左手首 ＆ 手が肩より上)
+              const isRightWristInGS = rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= gsRad;
+              const isLeftWristInGS = leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= gsRad;
+              const isRightWristAboveShoulder = rightShoulder && rightWrist && rightWrist.y < rightShoulder.y;
+              const isLeftWristAboveShoulder = leftShoulder && leftWrist && leftWrist.y < leftShoulder.y;
+
+              if (isRightWristInGS && isRightWristAboveShoulder) {
                 p1GS_Active = true;
               }
-              if (leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= gsRad) {
+              if (isLeftWristInGS && isLeftWristAboveShoulder) {
                 p1GS_Active = true;
               }
-              // 刀 (右手首 or 左手首)
-              if (rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= ktRad) {
+
+              // 刀 (右手首 or 左手首 ＆ 肘が130度以下に曲がっている)
+              const leftElbow = pose.keypoints[13];
+              const rightElbow = pose.keypoints[14];
+              
+              let rightAngle = 180;
+              if (rightShoulder && rightElbow && rightWrist) {
+                rightAngle = getAngle(rightShoulder, rightElbow, rightWrist);
+              }
+              let leftAngle = 180;
+              if (leftShoulder && leftElbow && leftWrist) {
+                leftAngle = getAngle(leftShoulder, leftElbow, leftWrist);
+              }
+
+              if (rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= ktRad && rightAngle <= 130) {
                 p1KT_Active = true;
               }
-              if (leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= ktRad) {
+              if (leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= ktRad && leftAngle <= 130) {
                 p1KT_Active = true;
               }
             } else {
@@ -579,18 +622,36 @@ function drawSkeleton(poses) {
                   p2LS_Active = true;
                 }
               }
-              // 大剣
-              if (rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= gsRad) {
+              // 大剣 (右手首 or 左手首 ＆ 手が肩より上)
+              const isRightWristInGS = rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= gsRad;
+              const isLeftWristInGS = leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= gsRad;
+              const isRightWristAboveShoulder = rightShoulder && rightWrist && rightWrist.y < rightShoulder.y;
+              const isLeftWristAboveShoulder = leftShoulder && leftWrist && leftWrist.y < leftShoulder.y;
+
+              if (isRightWristInGS && isRightWristAboveShoulder) {
                 p2GS_Active = true;
               }
-              if (leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= gsRad) {
+              if (isLeftWristInGS && isLeftWristAboveShoulder) {
                 p2GS_Active = true;
               }
-              // 刀
-              if (rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= ktRad) {
+
+              // 刀 (右手首 or 左手首 ＆ 肘が130度以下に曲がっている)
+              const leftElbow = pose.keypoints[13];
+              const rightElbow = pose.keypoints[14];
+              
+              let rightAngle = 180;
+              if (rightShoulder && rightElbow && rightWrist) {
+                rightAngle = getAngle(rightShoulder, rightElbow, rightWrist);
+              }
+              let leftAngle = 180;
+              if (leftShoulder && leftElbow && leftWrist) {
+                leftAngle = getAngle(leftShoulder, leftElbow, leftWrist);
+              }
+
+              if (rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= ktRad && rightAngle <= 130) {
                 p2KT_Active = true;
               }
-              if (leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= ktRad) {
+              if (leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= ktRad && leftAngle <= 130) {
                 p2KT_Active = true;
               }
             }
