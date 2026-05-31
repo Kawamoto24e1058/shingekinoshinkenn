@@ -741,11 +741,11 @@ function onPoseResults(results) {
     // results.poseLandmarks に全身33点のキーポイントが 0.0 〜 1.0 で入る
     if (results.poseLandmarks) {
       const formattedPose = {
-        score: 0.95,
+        score: 1.0,
         keypoints: results.poseLandmarks.map((lm) => ({
           x: lm.x * 400,
           y: lm.y * 300,
-          score: lm.visibility // visibility を score として流用
+          score: 1.0 // 💡 見切れや隠れ部位による描画ロストを防ぐため、キーポイントのスコアを強制的に1.0に固定！
         }))
       };
       
