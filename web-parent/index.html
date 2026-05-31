@@ -876,17 +876,34 @@
         <!-- 4. バトルステージ画面 -->
         <div id="battleScreen" class="screen">
             <div class="subtitle" id="battleStageSubtitle">BATTLE STAGE</div>
-            <div class="scoreboard">
-                <div class="team-label label-p1">PLAYER 1</div>
-                <span id="p1Score" class="score-num">0</span>
-                <span class="vs-text">VS</span>
-                <span id="p2Score" class="score-num">0</span>
-                <div class="team-label label-p2">PLAYER 2</div>
-            </div>
             
-            <div class="weapon-preview">
-                <div class="preview-item p1">P1 武器: <span id="battleWeaponP1">未確定</span></div>
-                <div class="preview-item p2">P2 武器: <span id="battleWeaponP2">未確定</span></div>
+            <div class="battle-arena">
+                <!-- PLAYER 1 BATTLE CARD -->
+                <div class="battle-card p1" id="p1-battle-card">
+                    <div class="card-glow"></div>
+                    <div class="player-tag">PLAYER 1</div>
+                    <div class="weapon-badge p1">P1 武器: <span id="battleWeaponP1">未確定</span></div>
+                    <div class="score-display">
+                        <span id="p1Score" class="score-num">0</span>
+                    </div>
+                    <div class="score-label">SLASH COUNT</div>
+                </div>
+
+                <!-- VS DIVIDER -->
+                <div class="vs-divider" id="vs-divider">
+                    <span class="vs-text">VS</span>
+                </div>
+
+                <!-- PLAYER 2 BATTLE CARD -->
+                <div class="battle-card p2" id="p2-battle-card">
+                    <div class="card-glow"></div>
+                    <div class="player-tag">PLAYER 2</div>
+                    <div class="weapon-badge p2">P2 武器: <span id="battleWeaponP2">未確定</span></div>
+                    <div class="score-display">
+                        <span id="p2Score" class="score-num">0</span>
+                    </div>
+                    <div class="score-label">SLASH COUNT</div>
+                </div>
             </div>
 
             <!-- フルスクリーンの斬撃閃光エフェクト要素 -->

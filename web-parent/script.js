@@ -2,11 +2,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, doc, setDoc, onSnapshot, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-// ── Firebase 初期化設定 ──
-import { firebaseConfig } from "./firebase-config.js";
+// ── Firebase 初期化設定 (環境変数動的ロード) ──
+import { loadFirebaseConfig } from "./firebase-config.js";
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+let app = null;
+let db = null;
 
 // ── HTML要素の取得 ──
 const videoElement = document.getElementById('webcam');
@@ -364,10 +364,7 @@ function startTimer() {
         timerEl.textContent = timeRemaining;
       } else {
         clearInterval(timerInterval);
-        gameStatus = "finished";
-        updatePhaseUI();
-        updateFirestoreGameStatus("finished");
-        isDetecting = false;
+        triggerBattleEndSequence();
       }
     }, 1000);
   } catch (e) {
@@ -387,6 +384,28 @@ async function updateFirestoreGameStatus(status) {
 // バトル開始（playingへ移行）
 async function startMatch() {
   try {
+    // 前回のバトル終了時の演出をクリーンアップ
+    isBattleEndSequenceTriggered = false;
+    const p1CardElement = document.getElementById("p1-battle-card");
+    const p2CardElement = document.getElementById("p2-battle-card");
+    if (p1CardElement) {
+      p1CardElement.classList.remove("winner-active");
+      p1CardElement.style.opacity = "1";
+      p1CardElement.style.pointerEvents = "auto";
+      const banner = p1CardElement.querySelector(".winner-banner");
+      if (banner) banner.remove();
+    }
+    if (p2CardElement) {
+      p2CardElement.classList.remove("winner-active");
+      p2CardElement.style.opacity = "1";
+      p2CardElement.style.pointerEvents = "auto";
+      const banner = p2CardElement.querySelector(".winner-banner");
+      if (banner) banner.remove();
+    }
+    const drawBanner = document.querySelector(".draw-banner");
+    if (drawBanner) drawBanner.remove();
+    document.querySelectorAll(".slice-container").forEach(c => c.remove());
+
     gameStatus = "playing";
     timeRemaining = 90;
     timerEl.textContent = timeRemaining;
@@ -1042,6 +1061,12 @@ function resetSelectionIfAbsent(playerKey, regStatusEl, cardEl) {
 // ── 検出器初期化（MoveNet MultiPose 超安定マルチポーズエンジン） ──
 async function initPoseBattleSystem() {
   try {
+    setupStatus.textContent = "Firebase環境変数をロード中...";
+    if (!db) {
+      const firebaseConfig = await loadFirebaseConfig();
+      app = initializeApp(firebaseConfig);
+      db = getFirestore(app);
+    }
     setupStatus.textContent = "MoveNet 超軽量マルチポーズエンジンをロード中...";
 
     // SDKのロード状態を確実にチェックし、親切なエラーを投げる
@@ -1112,6 +1137,165 @@ async function initPoseBattleSystem() {
 }
 
 startBtn.addEventListener('click', initPoseBattleSystem);
+
+// ── 💀 バトル終了時の勝利演出（敗者パネル両断・落下 ＆ 勝者お祝い） ──
+let isBattleEndSequenceTriggered = false; // 二重実行防止用
+
+async function triggerBattleEndSequence() {
+  if (isBattleEndSequenceTriggered) return;
+  isBattleEndSequenceTriggered = true;
+
+  console.log("🏆 バトル終了演出シーケンス開始 🏆");
+  
+  // ゲームの状態を完全に終了にする
+  gameStatus = "finished";
+  updatePhaseUI();
+  if (timerInterval) clearInterval(timerInterval);
+  isDetecting = false;
+
+  // 1. スコア判定
+  const p1FinalScore = p1Score;
+  const p2FinalScore = p2Score;
+  console.log(`最終スコア - P1: ${p1FinalScore} / P2: ${p2FinalScore}`);
+
+  const p1CardElement = document.getElementById("p1-battle-card");
+  const p2CardElement = document.getElementById("p2-battle-card");
+  const arena = document.querySelector(".battle-arena");
+
+  if (!p1CardElement || !p2CardElement || !arena) {
+    console.error("バトルパネルの要素が見つかりません。");
+    return;
+  }
+
+  // バトル終了の共通効果音（大剣の一撃音など）
+  playWeaponSound("taiken");
+
+  if (p1FinalScore === p2FinalScore) {
+    // ── 引き分け（DRAW）の場合 ──
+    console.log("判定：引き分け");
+    
+    // DRAW バナーを生成
+    const drawBanner = document.createElement("div");
+    drawBanner.className = "draw-banner";
+    drawBanner.textContent = "DRAW";
+    arena.appendChild(drawBanner);
+
+    // 引き分け時のサウンド
+    setTimeout(() => {
+      playWeaponSound("katana");
+    }, 400);
+
+  } else {
+    // ── 勝敗が決まった場合 ──
+    const isP1Winner = p1FinalScore > p2FinalScore;
+    const winnerCard = isP1Winner ? p1CardElement : p2CardElement;
+    const loserCard = isP1Winner ? p2CardElement : p1CardElement;
+    const winnerName = isP1Winner ? "PLAYER 1" : "PLAYER 2";
+    const loserName = isP1Winner ? "PLAYER 2" : "PLAYER 1";
+    const winnerWeapon = isP1Winner ? (selectionState.player1.selectedWeapon || "sword") : (selectionState.player2.selectedWeapon || "sword");
+
+    console.log(`勝者: ${winnerName} / 敗者: ${loserName}`);
+
+    // (1) 敗者カードに真っ二つのスライス線を走らせる
+    const loserRect = loserCard.getBoundingClientRect();
+    const slash = document.createElement('div');
+    slash.className = 'undertale-slash';
+    
+    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    
+    slash.style.position = 'absolute';
+    slash.style.left = (loserRect.left + scrollLeft) + 'px';
+    slash.style.top = (loserRect.top + scrollTop) + 'px';
+    slash.style.width = loserRect.width + 'px';
+    slash.style.height = loserRect.height + 'px';
+    slash.style.pointerEvents = 'none';
+    slash.style.zIndex = '9999';
+    
+    const line = document.createElement('div');
+    line.className = 'undertale-slash-line';
+    line.style.backgroundColor = '#ff416c'; // 敗者のスライス線はネオンレッド
+    line.style.boxShadow = '0 0 20px #ff003c, 0 0 10px #fff';
+    slash.appendChild(line);
+    document.body.appendChild(slash);
+
+    // 敗者カードの被弾シェイク
+    loserCard.classList.add('undertale-hit-shake');
+
+    // (2) 250ms後に、敗者カードをクリップパスで分割したダミー破片要素に置き換え
+    setTimeout(() => {
+      slash.remove();
+      loserCard.classList.remove('undertale-hit-shake');
+      
+      // 元のカードを透明にして見えなくする
+      loserCard.style.opacity = "0";
+      loserCard.style.pointerEvents = "none";
+
+      // 破片用コンテナを生成
+      const sliceContainer = document.createElement("div");
+      sliceContainer.className = "slice-container";
+      sliceContainer.style.left = loserCard.offsetLeft + "px";
+      sliceContainer.style.top = loserCard.offsetTop + "px";
+      sliceContainer.style.width = loserCard.offsetWidth + "px";
+      sliceContainer.style.height = loserCard.offsetHeight + "px";
+
+      // 右上破片の生成
+      const pieceTop = document.createElement("div");
+      pieceTop.className = "slice-piece piece-top";
+      pieceTop.innerHTML = loserCard.innerHTML;
+      
+      // 左下破片の生成
+      const pieceBottom = document.createElement("div");
+      pieceBottom.className = "slice-piece piece-bottom";
+      pieceBottom.innerHTML = loserCard.innerHTML;
+
+      sliceContainer.appendChild(pieceTop);
+      sliceContainer.appendChild(pieceBottom);
+      arena.appendChild(sliceContainer);
+
+      // 両断音を再生
+      playWeaponSound("taiken");
+
+      // 破片が落ちきった後のゴミ掃除 (1.5秒後)
+      setTimeout(() => {
+        sliceContainer.remove();
+      }, 1500);
+
+    }, 250);
+
+    // (3) 敗者落下中 (700ms後) に勝者側の超プレミアムお祝い演出を始動
+    setTimeout(() => {
+      // 勝者カードを光り輝かせて大きくする
+      winnerCard.classList.add("winner-active");
+
+      // 王冠 ＆ WINNER バナーをポップアップ
+      const banner = document.createElement("div");
+      banner.className = "winner-banner";
+      banner.innerHTML = "👑 WINNER 👑";
+      winnerCard.appendChild(banner);
+
+      // 勝者の武器効果音でお祝い！
+      playWeaponSound(winnerWeapon);
+
+      // 振動 (対応端末のみ)
+      if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200, 100, 300]);
+      }
+    }, 700);
+  }
+
+  // 2. Firestoreに勝敗ステータスを書き込む
+  try {
+    const battleDocRef = doc(db, "shinken_rooms", "battle");
+    await setDoc(battleDocRef, {
+      status: "finished",
+      match_status: "finished",
+      winner: p1FinalScore === p2FinalScore ? "draw" : (p1FinalScore > p2FinalScore ? "player1" : "player2")
+    }, { merge: true });
+  } catch (e) {
+    console.error("Firestore終了ステータス書き込みエラー:", e);
+  }
+}
 
 // ── 💡 1回生UI合体用の受け皿関数 ──
 export function updateP1HealthGauge(score) {
@@ -1223,10 +1407,7 @@ function setupFirestoreListener() {
         }
 
         if ((data.status === "finished" || data.match_status === "finished") && gameStatus !== "finished") {
-          gameStatus = "finished";
-          updatePhaseUI();
-          if (timerInterval) clearInterval(timerInterval);
-          isDetecting = false;
+          triggerBattleEndSequence();
         }
       }
     });
