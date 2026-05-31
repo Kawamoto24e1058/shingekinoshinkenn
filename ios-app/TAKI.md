@@ -1,14 +1,13 @@
-# たき 個人ドキュメント（作業メモ ＆ チェックリスト）
+# タッキー（たき）個人ドキュメント（作業メモ ＆ チェックリスト）
 
-たき個人の進捗・TODO・メモ用。自由に書き換えてOK。
+タッキー（たき）個人の進捗・TODO・メモ用。自由に書き換えてOK。
 役割の全体像は [../docs/ROLES.md](../docs/ROLES.md)、連携仕様は [../docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)、開発の文脈メモは [CLAUDE.md](CLAUDE.md)。
 
 - **担当**：セットアップ ＆ iOS 全般（センサー・振動演出・スマホUI）
 - **フォルダ**：`ios-app/`
 - **ブランチ**：`feature/ios-setup`
 
-> ⚠️ **Firestore への書き込み（iOS ↔ Firebase 連携）は はる 担当**。
-> たきは抜刀・構えを**検知してイベント／状態を渡す**ところまで。SDK 導入や書き込みコードは はる と組む。
+> 剣の選択は Web 側で行う。タッキーは抜刀・構えを**検知して ready / drawn を送る**ところを担当する。
 
 ---
 
@@ -32,16 +31,22 @@
 - [x] 振り抜き時の武器別スパイクパターン
 - [ ] 抜刀（鞘走り → ジャキィン）を構え→抜刀のフローに組み込む
 
-### スマホUI（SwiftUI ／ みずきから移管）
-- [ ] スタート画面
-- [ ] 剣セレクト画面
+### スマホUI（SwiftUI）
 - [ ] 抜刀待機画面
 - [ ] UI とセンサー・振動ロジックの結線（画面遷移・状態受け渡し）
+- [x] 剣選択は Web 側で行う方針に変更
 
 ### 連携（はると協働）
-- [x] ボタン押下で `matches/{matchId}` の `players.p1.{ready, drawn, weapon}` を送る導線を追加（REST API 直叩き）
+- [x] ボタン押下で `matches/{matchId}` の `players.p1.{ready, drawn}` を送る導線を追加（REST API 直叩き）
+- [x] Firebase との簡易連携テストで、データ送受信が動作することを確認
 - [ ] 自動検知（CoreMotion）と Firestore 送信の結線：構え判定が立ったら `sendReady`、抜刀判定が立ったら `sendDrawComplete` を自動で呼ぶ
 - [ ] はると組んで、抜刀検知 → `players/p1/drawn = true` の繋ぎ込みテスト
+
+### 発表前タスク
+- [ ] 水木の正式フロントエンドコードと現状実装の統合を確認する
+- [ ] 自分が実装した振動・モーション・Firestore 送信機能の説明を Discord に投稿する
+- [ ] スライド用に「できたこと」と「今後やりたいこと」を短くまとめる
+- [ ] 時間があれば抜刀機能（構え→抜刀の自動判定）を実装する
 
 ---
 
@@ -76,15 +81,14 @@
   - **「構え完了を送信」** → `FirestoreEventSender.sendReady(weapon:)`
   - **「抜刀完了を送信」** → `FirestoreEventSender.sendDrawComplete(weapon:)`
 - どちらも Firestore REST API (`PATCH /v1/projects/{projectId}/databases/(default)/documents/matches/{matchId}`) を叩いて `matches/{matchId}` のフィールドを更新する。
-- 送信されるフィールド（`{playerId}` は `FirestoreConfig.plist` の値、`{weapon}` は選択中武器の `WeaponType.rawValue`）：
+- 最終仕様では剣選択は Web 側が担当する。iOS からの `weapon` 送信は暫定実装で、削除または無視する。
+- iOS が送信するべきフィールド（`{playerId}` は `FirestoreConfig.plist` の値）：
 
   | イベント | フィールド | 値 |
   |---------|-----------|----|
   | ready   | `players.{playerId}.ready`     | `true` |
-  |         | `players.{playerId}.weapon`    | `"lightsaber" \| "greatsword" \| "smallsword"` |
   |         | `players.{playerId}.readyAt`   | ISO8601 文字列 |
   | drawn   | `players.{playerId}.drawn`     | `true` |
-  |         | `players.{playerId}.weapon`    | 同上 |
   |         | `players.{playerId}.drawnAt`   | ISO8601 文字列 |
 
 - Firebase SDK はまだ使わず、`URLSession` だけで動かす簡易版。
@@ -92,6 +96,14 @@
 - `FirestoreConfig.plist` は `.gitignore` 対象。公開リポジトリには入れない。
 - Firestore ルールがテストモード等で未認証書き込みを許可していない場合は `HTTP 403` になる。
 - 次の段階：上記ボタンの呼び出し元を CoreMotion の検知ロジックに差し替え、構え／抜刀の自動送信に切り替える。
+
+### 2026-05-31 時点の共有状況
+
+- Firebase との連携テストは成功。データの送受信が正常に動くことを確認済み。
+- 振動機能は実装完了。Pull Request 提出済み。
+- バトル画面では、プレイヤーの準備状態と Web 側で選択した武器データが正しく反映されることを確認済み。
+- ボタンでのデータ送信は実装済み。次は CoreMotion の検知結果から自動送信する。
+- 水木の正式フロントエンドコードはルート直下に配置済み。正式配置を `web-parent/` にするかは要確認。
 
 ---
 
@@ -291,7 +303,7 @@ SoundManager（新規, @MainActor / ObservableObject）
 ### 連携メモ（この2つはセットで効く）
 
 - 「攻撃イベント」のデータ形（**方向の角度 + 着弾タイミング**）を最初に1つ決めておくと、空間オーディオとガード判定の両方で使い回せる。
-- 攻撃を出すのは対戦相手 → ここは **はる の Firestore / 通信** と関わる領域。たき側は「方向つき攻撃イベントを受け取ったら、音を鳴らし、Watch のガード判定をする」ところを担当、という切り分けにできる。
+- 攻撃を出すのは対戦相手 → ここは **はる の Firestore / 通信** と関わる領域。タッキー側は「方向つき攻撃イベントを受け取ったら、音を鳴らし、Watch のガード判定をする」ところを担当、という切り分けにできる。
 
 ---
 
