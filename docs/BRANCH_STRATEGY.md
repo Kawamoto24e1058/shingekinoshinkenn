@@ -9,12 +9,13 @@
 - **`main` は常に動く状態に保つ**（壊れたコードを直接 push しない）。
 - 各自 **`main` から自分の feature ブランチを切って** 作業する。
 - 担当フォルダを分けているので、**自分のフォルダ内だけ触れば基本コンフリクトしない**。
+- 既に取り込まれたブランチごとの変更内容は [BRANCH_CHANGES.md](BRANCH_CHANGES.md) にまとめる。
 
 ```
 main
-├── feature/haru-battle   … はる（web-parent/ のカメラ・判定）
-├── feature/ios-setup     … たき（ios-app/）
-└── feature/junior-ui     … みずき（web-parent/ の大画面 UI・演出）
+├── feature/haru-battle   … はる（Web のカメラ・判定）
+├── feature/ios-setup     … タッキー（たき）（ios-app/）
+└── feature/junior-ui     … みずき（Web の大画面 UI・演出）
 ```
 
 ---
@@ -23,13 +24,13 @@ main
 
 | フォルダ | 主担当 | 補足 |
 |----------|--------|------|
-| `ios-app/` | たき | センサー・振動・スマホUI まで一括（みずきは触らない） |
-| `web-parent/`（検出・判定） | はる | カメラ／MediaPipe／判定ロジック |
-| `web-parent/`（表示・演出） | みずき | HP ゲージ／スコアボード／エフェクト |
+| `ios-app/` | タッキー（たき） | センサー・振動・スマホUI まで一括（みずきは触らない） |
+| ルート直下 Web ファイル / `web-parent/`（検出・判定） | はる | カメラ／MediaPipe／判定ロジック |
+| ルート直下 Web ファイル / `web-parent/`（表示・演出） | みずき | 武器選択／HP ゲージ／スコアボード／エフェクト |
 | `docs/`・`README.md` | 全員 | 更新したら一言共有 |
 
 > **コツ：同じファイルを 2 人で同時に編集しないこと。** ファイルを分ければ衝突しない。
-> 例）`web-parent/` 内で `detector.js`（はる）と `display.js`（みずき）に分ける、など。
+> 例）Web 側で `detector.js`（はる）と `display.js`（みずき）に分ける、など。
 
 ---
 
@@ -64,8 +65,10 @@ git push -u origin feature/ios-setup
 ## main への取り込み（マージ）
 
 - 区切りがついたら **GitHub で Pull Request** を作り、できれば誰か 1 人に見てもらってからマージ。
-- ハッカソンで急ぐ場合は **セルフマージ可**。ただし **「動く状態」を確認してから**。
+- ハッカソンで急ぐ場合も、基本は **ブランチ作成 → Pull Request → レビュー → マージ** の流れにする。レビューには Copilot も活用する。
+- セルフマージする場合も **「動く状態」を確認してから**。
 - マージ後は、他メンバーも各自のブランチで `git merge main` して最新を取り込む。
+- `main` へ直接 push しない。リモートとローカルの `main` を同期してから動作確認する。
 
 ---
 
