@@ -166,10 +166,11 @@
         .selection-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 430px; /* 中央のWebカメラモニター用にマージンを広く確保 */
+            gap: 520px; /* カメラの幅 (520px) に完全に合わせて重なりを防ぎ中央配置 */
             width: 100%;
             max-width: 1300px;
             margin-bottom: 10px;
+            justify-content: center; /* 完全に左右対称に中央寄せ */
         }
         .selection-panel {
             background: linear-gradient(180deg, rgba(5, 12, 23, 0.95) 0%, rgba(8, 14, 26, 0.98) 100%);
@@ -737,7 +738,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 480px; /* 中央のWebカメラ用に広大な余白を確保 */
+            gap: 520px; /* カメラの幅 (520px) に完全に合わせて重なりを防ぎ中央配置 */
             width: 100%;
             max-width: 1400px;
             margin: 0 auto;
