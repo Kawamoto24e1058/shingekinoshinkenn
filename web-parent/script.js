@@ -45,6 +45,7 @@ let timerInterval = null;
 let poseEngine = null; // Official MediaPipe Pose インスタンス
 let cameraEngine = null; // Official MediaPipe Camera インスタンス
 let isDetecting = false;
+let isTransitioningToBattle = false; // 💡 重複実行防止フラグ
 
 let p1Score = 0;
 let p2Score = 0;
@@ -922,6 +923,12 @@ export function updateP2HealthGauge(score) {
 
 export function switchToBattleScreen() {
   console.log("[受け皿関数] switchToBattleScreen がキックされました。");
+  try {
+    statusText.textContent = "🔥 STEP 3: 斬撃連打！叩き込め！";
+    if (phaseTitleEl) phaseTitleEl.textContent = "フェーズ：バトル中！";
+  } catch (e) {
+    console.error("switchToBattleScreen UI更新エラー:", e);
+  }
 }
 
 // ── Firestore リアルタイム同期 ──
@@ -954,7 +961,8 @@ function setupFirestoreListener() {
             p2Card.classList.remove('ready');
           }
 
-          if (data.p1_ready === true && data.p2_ready === true) {
+          if (data.p1_ready === true && data.p2_ready === true && !isTransitioningToBattle) {
+            isTransitioningToBattle = true;
             statusText.textContent = "全員抜刀完了！バトルスタート！";
             setTimeout(() => {
               p1Card.classList.remove('ready');
