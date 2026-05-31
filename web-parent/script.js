@@ -2,18 +2,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, doc, setDoc, onSnapshot, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-// ── Firebase 初期化設定 ──
-const firebaseConfig = {
-  apiKey: "AIzaSyCkW3UAnb8jRF8VJggYD69Apyb8GZYY7LY",
-  authDomain: "momotake-2f30b.firebaseapp.com",
-  projectId: "momotake-2f30b",
-  storageBucket: "momotake-2f30b.firebasestorage.app",
-  messagingSenderId: "321614595316",
-  appId: "1:321614595316:web:5bd921f114eb8f4c58caa1"
-};
+// ── Firebase 初期化設定 (環境変数動的ロード) ──
+import { loadFirebaseConfig } from "./firebase-config.js";
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+let app = null;
+let db = null;
 
 // ── HTML要素の取得 ──
 const videoElement = document.getElementById('webcam');
@@ -42,9 +35,13 @@ const slashLine = document.getElementById('slashLine');
 const slashText = document.getElementById('slashText');
 const body = document.body;
 
+// ── 📸 バトルモーメント撮影・保存用変数 ──
+let capturedPhotoData = null;
+let photoCaptureTimeout = null;
+
 // ── ゲーム状態管理 ──
 let gameStatus = "selecting";
-let timeRemaining = 90;
+let timeRemaining = 30;
 let timerInterval = null;
 let poseEngine = null; // Official MediaPipe Pose インスタンス
 let cameraEngine = null; // Official MediaPipe Camera インスタンス
@@ -181,6 +178,44 @@ function switchScreen(screenId) {
 }
 window.switchScreen = switchScreen; // グローバルに露出
 
+// ── 🎯 【UNDERTALE風 ボタン攻撃エフェクト】 ──
+function triggerUndertaleSlash(targetButton) {
+  if (!targetButton) return;
+  
+  try {
+    const rect = targetButton.getBoundingClientRect();
+    const slash = document.createElement('div');
+    slash.className = 'undertale-slash';
+    
+    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    
+    slash.style.position = 'absolute';
+    slash.style.left = (rect.left + scrollLeft) + 'px';
+    slash.style.top = (rect.top + scrollTop) + 'px';
+    slash.style.width = rect.width + 'px';
+    slash.style.height = rect.height + 'px';
+    slash.style.pointerEvents = 'none';
+    slash.style.zIndex = '9999';
+    
+    const line = document.createElement('div');
+    line.className = 'undertale-slash-line';
+    slash.appendChild(line);
+    
+    document.body.appendChild(slash);
+    
+    // ボタン自体の揺れ（被弾ブレ）エフェクト
+    targetButton.classList.add('undertale-hit-shake');
+    
+    setTimeout(() => {
+      slash.remove();
+      targetButton.classList.remove('undertale-hit-shake');
+    }, 450);
+  } catch (e) {
+    console.log("エフェクト生成エラー:", e);
+  }
+}
+
 // ── 🎯 【グローバルスイング（決定）ハンドラー】 ──
 function handleGlobalSwing(playerKey) {
   const now = Date.now();
@@ -196,10 +231,20 @@ function handleGlobalSwing(playerKey) {
     
     if (currentActiveScreen === "startScreen") {
       console.log("スイング検知：スタート画面決定 -> 説明画面へ");
-      switchScreen("guideScreen");
+      const btn = document.querySelector('#startScreen .btn-primary');
+      if (btn) triggerUndertaleSlash(btn);
+      
+      setTimeout(() => {
+        switchScreen("guideScreen");
+      }, 350); // エフェクトと揺れをしっかり見せるため350msディレイ
     } else if (currentActiveScreen === "guideScreen") {
       console.log("スイング検知：説明画面決定 -> 武器選択画面へ");
-      switchScreen("selectionScreen");
+      const btn = document.querySelector('#guideScreen .btn-primary');
+      if (btn) triggerUndertaleSlash(btn);
+      
+      setTimeout(() => {
+        switchScreen("selectionScreen");
+      }, 350); // エフェクトと揺れをしっかり見せるため350msディレイ
     }
     return;
   }
@@ -238,29 +283,28 @@ function updateWeaponUI(playerKey, weaponKey) {
   }
 }
 
-// MediaPipe Pose 33点 接続ライン
+// MoveNet COCO 17点 接続ライン
 const SKELETON_CONNECTIONS = [
-  [11, 12],
-  [11, 13], [13, 15],
-  [12, 14], [14, 16],
-  [11, 23], [12, 24],
-  [23, 24],
-  [23, 25], [25, 27],
-  [24, 26], [26, 28]
+  [5, 6], // 両肩
+  [5, 7], [7, 9], // 左腕
+  [6, 8], [8, 10], // 右腕
+  [5, 11], [6, 12], [11, 12], // 胴体
+  [11, 13], [13, 15], // 左足
+  [12, 14], [14, 16]  // 右足
 ];
 
 // 武器選択用の固定ターゲット座標と半径の定義
-const TARGET_RADIUS = 55; // 基本のターゲット円の半径 (55px)
-const KEEP_RADIUS = 95;   // キープ中の許容半径 (95px) - 吸い付き境界シールド
+const TARGET_RADIUS = 75; // 基本のターゲット円の半径 (75px) - 大幅に拡大して吸い付きやすく！
+const KEEP_RADIUS = 120;  // キープ中の許容半径 (120px) - 見切れやブレでも外れないように！
 
 const TARGETS = {
   player1: { // 画面左側（青）＝ 生画像の右側（x: 300）
-    greatsword: { x: 300, y: 70 },   
+    greatsword: { x: 300, y: 85 },   // 少し下げて届きやすく
     katana: { x: 300, y: 220 },      
     lightsaber: { x: 300, y: 145 }   
   },
   player2: { // 画面右側（赤）＝ 生画像の左側（x: 100）
-    greatsword: { x: 100, y: 70 },
+    greatsword: { x: 100, y: 85 },   // 少し下げて届きやすく
     katana: { x: 100, y: 220 },
     lightsaber: { x: 100, y: 145 }
   }
@@ -290,6 +334,80 @@ function getAngle(p1, p2, p3) {
     return Math.acos(cosTheta) * (180 / Math.PI);
   } catch (e) {
     return 180;
+  }
+}
+
+// 各ポーズを基準とした動的な武器選択ターゲット座標と半径の計算
+function getDynamicTargets(pose) {
+  try {
+    const leftShoulder = pose.keypoints[5];
+    const rightShoulder = pose.keypoints[6];
+    const leftHip = pose.keypoints[11];
+    const rightHip = pose.keypoints[12];
+    const nose = pose.keypoints[0];
+
+    // 肩の中心点
+    let playerCenterX = 200;
+    let playerCenterY = 150;
+    let hasShoulders = false;
+
+    if (leftShoulder && rightShoulder && leftShoulder.score > 0.15 && rightShoulder.score > 0.15) {
+      playerCenterX = (leftShoulder.x + rightShoulder.x) / 2;
+      playerCenterY = (leftShoulder.y + rightShoulder.y) / 2;
+      hasShoulders = true;
+    } else if (nose && nose.score > 0.15) {
+      playerCenterX = nose.x;
+      playerCenterY = nose.y + 40;
+    }
+
+    // 体格（カメラとの距離）によるスケーリング比率の計算
+    let scaleRatio = 1.0;
+    if (hasShoulders) {
+      const shoulderWidth = Math.hypot(leftShoulder.x - rightShoulder.x, leftShoulder.y - rightShoulder.y);
+      scaleRatio = Math.max(0.6, Math.min(1.8, shoulderWidth / 85)); // 標準肩幅 85px を基準に制限をかける
+    }
+
+    // 鼻の座標フォールバック
+    const noseY = (nose && nose.score > 0.15) ? nose.y : (playerCenterY - 40 * scaleRatio);
+
+    // 大剣：頭（鼻）の上部
+    const gsTarget = {
+      x: playerCenterX,
+      y: noseY - 55 * scaleRatio
+    };
+
+    // ライトセーバー：胸（肩中心より少し下）
+    const lsTarget = {
+      x: playerCenterX,
+      y: playerCenterY + 30 * scaleRatio
+    };
+
+    // 刀：腰（股関節）の横
+    let katanaLeftTarget = { x: playerCenterX - 45 * scaleRatio, y: playerCenterY + 90 * scaleRatio };
+    let katanaRightTarget = { x: playerCenterX + 45 * scaleRatio, y: playerCenterY + 90 * scaleRatio };
+
+    if (leftHip && rightHip && leftHip.score > 0.15 && rightHip.score > 0.15) {
+      const hipY = (leftHip.y + rightHip.y) / 2;
+      katanaLeftTarget = { x: leftHip.x - 20 * scaleRatio, y: hipY };
+      katanaRightTarget = { x: rightHip.x + 20 * scaleRatio, y: hipY };
+    }
+
+    return {
+      scaleRatio,
+      greatsword: gsTarget,
+      lightsaber: lsTarget,
+      katanaLeft: katanaLeftTarget,
+      katanaRight: katanaRightTarget
+    };
+  } catch (e) {
+    console.error("getDynamicTargets エラー:", e);
+    return {
+      scaleRatio: 1.0,
+      greatsword: { x: 200, y: 70 },
+      lightsaber: { x: 200, y: 145 },
+      katanaLeft: { x: 150, y: 220 },
+      katanaRight: { x: 250, y: 220 }
+    };
   }
 }
 
@@ -324,10 +442,7 @@ function startTimer() {
         timerEl.textContent = timeRemaining;
       } else {
         clearInterval(timerInterval);
-        gameStatus = "finished";
-        updatePhaseUI();
-        updateFirestoreGameStatus("finished");
-        isDetecting = false;
+        triggerBattleEndSequence();
       }
     }, 1000);
   } catch (e) {
@@ -347,8 +462,30 @@ async function updateFirestoreGameStatus(status) {
 // バトル開始（playingへ移行）
 async function startMatch() {
   try {
+    // 前回のバトル終了時の演出をクリーンアップ
+    isBattleEndSequenceTriggered = false;
+    const p1CardElement = document.getElementById("p1-battle-card");
+    const p2CardElement = document.getElementById("p2-battle-card");
+    if (p1CardElement) {
+      p1CardElement.classList.remove("winner-active");
+      p1CardElement.style.opacity = "1";
+      p1CardElement.style.pointerEvents = "auto";
+      const banner = p1CardElement.querySelector(".winner-banner");
+      if (banner) banner.remove();
+    }
+    if (p2CardElement) {
+      p2CardElement.classList.remove("winner-active");
+      p2CardElement.style.opacity = "1";
+      p2CardElement.style.pointerEvents = "auto";
+      const banner = p2CardElement.querySelector(".winner-banner");
+      if (banner) banner.remove();
+    }
+    const drawBanner = document.querySelector(".draw-banner");
+    if (drawBanner) drawBanner.remove();
+    document.querySelectorAll(".slice-container").forEach(c => c.remove());
+
     gameStatus = "playing";
-    timeRemaining = 90;
+    timeRemaining = 30;
     timerEl.textContent = timeRemaining;
     p1Score = 0;
     p2Score = 0;
@@ -361,15 +498,20 @@ async function startMatch() {
     await setDoc(battleDocRef, {
       status: "playing",
       match_status: "playing",
-      player1_score: 0,
-      player2_score: 0,
-      player1_weapon: selectionState.player1.selectedWeapon,
-      player2_weapon: selectionState.player2.selectedWeapon,
+      p1_score: 0,
+      p2_score: 0,
+      p1_weapon: selectionState.player1.selectedWeapon,
+      p2_weapon: selectionState.player2.selectedWeapon,
       p1_vibrate: false,
       p2_vibrate: false
     }, { merge: true });
 
     startTimer();
+
+    // バトル開始から【15秒が経過した瞬間】にバックグラウンド自動激写撮影タイマーを始動！
+    if (photoCaptureTimeout) clearTimeout(photoCaptureTimeout);
+    capturedPhotoData = null;
+    photoCaptureTimeout = setTimeout(captureBattlePhoto, 15000);
   } catch (e) {
     console.error("startMatch エラー:", e);
   }
@@ -414,7 +556,7 @@ async function handleSwing(playerKey) {
 
     const battleDocRef = doc(db, "shinken_rooms", "battle");
     await setDoc(battleDocRef, {
-      [`${playerKey === 'player1' ? 'player1_score' : 'player2_score'}`]: increment(1)
+      [`${playerKey === 'player1' ? 'p1_score' : 'p2_score'}`]: increment(1)
     }, { merge: true });
   } catch (e) {
     console.error("Firestoreスコア送信エラー:", e);
@@ -427,10 +569,10 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
     const sel = selectionState[playerKey];
     if (sel.locked) return;
 
-    const leftShoulder = pose.keypoints[11];
-    const rightShoulder = pose.keypoints[12];
-    const leftWrist = pose.keypoints[15];
-    const rightWrist = pose.keypoints[16];
+    const leftShoulder = pose.keypoints[5];
+    const rightShoulder = pose.keypoints[6];
+    const leftWrist = pose.keypoints[9];
+    const rightWrist = pose.keypoints[10];
     const nose = pose.keypoints[0];
 
     // 肩の見切れに完全対応した、鼻・手首連携プレイヤー特定フォールバック
@@ -445,14 +587,14 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
       poseCenterX = rightWrist.x;
     }
 
-    const isP1 = poseCenterX > 200; // ミラー反転：生画像で右側(x > 200)の人が、画面上では左側（Player 1）に映る
-
-    // 当該プレイヤーに割り当てられた固定ターゲット座標を参照
-    const t = isP1 ? TARGETS.player1 : TARGETS.player2;
+    // ── 人基準の相対座標から動的ターゲットを取得 ──
+    const dTargets = getDynamicTargets(pose);
+    const scaleRatio = dTargets.scaleRatio;
 
     // 現在吸い付き中の武器かどうかに応じて、判定半径を動的に決定（境界シールド）
     const getRadius = (weaponKey) => {
-      return (sel.detectingWeapon === weaponKey) ? KEEP_RADIUS : TARGET_RADIUS;
+      const baseRadius = (sel.detectingWeapon === weaponKey) ? KEEP_RADIUS : TARGET_RADIUS;
+      return baseRadius * scaleRatio;
     };
 
     let currentPoseDetecting = null;
@@ -461,36 +603,51 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
     let debugWristKp2 = null;
 
     // ── 1. 【ライトセーバー（中）】 ──
-    const lsRadius = getRadius("lightsaber");
+    // ライトセーバーの判定エリアが大きすぎて他の構え（刀など）に誤爆するのを防ぐため、独自の厳格な半径を適用
+    const lsRadius = (sel.detectingWeapon === "lightsaber" ? 65 : 45) * scaleRatio;
     if (rightWrist && leftWrist && rightWrist.score > 0.15 && leftWrist.score > 0.15) {
-      const rDist = Math.hypot(rightWrist.x - t.lightsaber.x, rightWrist.y - t.lightsaber.y);
-      const lDist = Math.hypot(leftWrist.x - t.lightsaber.x, leftWrist.y - t.lightsaber.y);
-      if (rDist <= lsRadius && lDist <= lsRadius) {
+      // 両手の中心（平均座標）で判定する！
+      const centerWristX = (rightWrist.x + leftWrist.x) / 2;
+      const centerWristY = (rightWrist.y + leftWrist.y) / 2;
+      
+      const dist = Math.hypot(centerWristX - dTargets.lightsaber.x, centerWristY - dTargets.lightsaber.y);
+      // 両手で握る構えを厳密に判定するため、両手首の近接距離を 35px * scaleRatio に厳格化
+      const wristsClose = Math.hypot(rightWrist.x - leftWrist.x, rightWrist.y - leftWrist.y) < (35 * scaleRatio);
+      
+      if (dist <= lsRadius && wristsClose) {
         currentPoseDetecting = "lightsaber";
         debugWristKp = rightWrist;
         debugWristKp2 = leftWrist;
-        debugTargetKp = t.lightsaber;
+        debugTargetKp = dTargets.lightsaber;
       }
     }
 
     // ── 2. 【大剣（上）】 ──
     const gsRadius = getRadius("greatsword");
     if (!currentPoseDetecting) {
-      // 大剣の構えの精度向上：手が肩より高い位置（y座標が肩より小さい）にあることを必須条件化！
-      const isRightWristInGS = rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= gsRadius;
-      const isLeftWristInGS = leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= gsRadius;
+      // 画面上部への見切れ対策：手首のy座標がターゲットy座標より高い（値が小さい）場合、yの距離は 0 とみなす（x座標の距離だけで判定する）
+      const checkGSWrist = (wrist) => {
+        if (!wrist || wrist.score <= 0.15) return false;
+        const dx = wrist.x - dTargets.greatsword.x;
+        const dy = wrist.y < dTargets.greatsword.y ? 0 : (wrist.y - dTargets.greatsword.y);
+        return Math.hypot(dx, dy) <= gsRadius;
+      };
+
+      const isRightWristInGS = checkGSWrist(rightWrist);
+      const isLeftWristInGS = checkGSWrist(leftWrist);
       
-      const isRightWristAboveShoulder = rightShoulder && rightWrist && rightWrist.y < rightShoulder.y;
-      const isLeftWristAboveShoulder = leftShoulder && leftWrist && leftWrist.y < leftShoulder.y;
+      // 肩の見切れ対策：肩が検出されないか、あるいは手首が肩より高い位置にある（15pxの許容誤差あり）
+      const isRightWristAboveShoulder = !rightShoulder || rightShoulder.score <= 0.15 || (rightWrist && rightWrist.y < rightShoulder.y + 15);
+      const isLeftWristAboveShoulder = !leftShoulder || leftShoulder.score <= 0.15 || (leftWrist && leftWrist.y < leftShoulder.y + 15);
 
       if (isRightWristInGS && isRightWristAboveShoulder) {
         currentPoseDetecting = "greatsword";
         debugWristKp = rightWrist;
-        debugTargetKp = t.greatsword;
+        debugTargetKp = dTargets.greatsword;
       } else if (isLeftWristInGS && isLeftWristAboveShoulder) {
         currentPoseDetecting = "greatsword";
         debugWristKp = leftWrist;
-        debugTargetKp = t.greatsword;
+        debugTargetKp = dTargets.greatsword;
       }
     }
 
@@ -498,31 +655,31 @@ function handleWeaponSelection(pose, playerKey, regStatusEl, cardEl) {
     const ktRadius = getRadius("sword");
     if (!currentPoseDetecting) {
       // 刀の構えの精度向上：腕をダラーンと下ろした誤検知を防ぐため、「肘が130度以下に曲がっている」ことを必須条件化！
-      const leftElbow = pose.keypoints[13];
-      const rightElbow = pose.keypoints[14];
+      const leftElbow = pose.keypoints[7];
+      const rightElbow = pose.keypoints[8];
       
-      // 右手での刀の構え判定
+      // 右手での刀の構え判定（右腰ターゲットを使用）
       let rightAngle = 180;
       if (rightShoulder && rightElbow && rightWrist) {
         rightAngle = getAngle(rightShoulder, rightElbow, rightWrist);
       }
-      const isRightWristInKatana = rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= ktRadius;
+      const isRightWristInKatana = rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - dTargets.katanaRight.x, rightWrist.y - dTargets.katanaRight.y) <= ktRadius;
       
-      // 左手での刀の構え判定
+      // 左手での刀の構え判定（左腰ターゲットを使用）
       let leftAngle = 180;
       if (leftShoulder && leftElbow && leftWrist) {
         leftAngle = getAngle(leftShoulder, leftElbow, leftWrist);
       }
-      const isLeftWristInKatana = leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= ktRadius;
+      const isLeftWristInKatana = leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - dTargets.katanaLeft.x, leftWrist.y - dTargets.katanaLeft.y) <= ktRadius;
 
       if (isRightWristInKatana && rightAngle <= 130) {
         currentPoseDetecting = "sword";
         debugWristKp = rightWrist;
-        debugTargetKp = t.katana;
+        debugTargetKp = dTargets.katanaRight;
       } else if (isLeftWristInKatana && leftAngle <= 130) {
         currentPoseDetecting = "sword";
         debugWristKp = leftWrist;
-        debugTargetKp = t.katana;
+        debugTargetKp = dTargets.katanaLeft;
       }
     }
 
@@ -640,8 +797,10 @@ async function checkAllWeaponsSelected() {
           p1_weapon: selectionState.player1.selectedWeapon,
           p2_weapon: selectionState.player2.selectedWeapon,
           p1_ready: false,
-          p2_ready: false
-        }, { merge: true });
+          p2_ready: false,
+          p1_score: 0,
+          p2_score: 0
+        }); // merge: true を削除してデータベース上のゴミデータを毎回完全上書き消去！
       }, 1500);
     }
   } catch (e) {
@@ -653,8 +812,8 @@ async function checkAllWeaponsSelected() {
 function processMovementLogics(pose, playerKey) {
   try {
     const state = playersState[playerKey];
-    const leftWrist = pose.keypoints[15];
-    const rightWrist = pose.keypoints[16];
+    const leftWrist = pose.keypoints[9];
+    const rightWrist = pose.keypoints[10];
 
     const currentLeftWristY = (leftWrist && leftWrist.score > 0.15) ? leftWrist.y : null;
     const currentRightWristY = (rightWrist && rightWrist.score > 0.15) ? rightWrist.y : null;
@@ -699,155 +858,7 @@ function drawSkeleton(poses) {
     ctx.scale(-1, 1); // 鏡像変換
 
     // ── 🎯 骨格ロスト時でも「的（ガイド円）」を絶対に強制描画 ──
-    if (gameStatus === "selecting") {
-      let p1GS_Active = false;
-      let p1KT_Active = false;
-      let p1LS_Active = false;
-
-      let p2GS_Active = false;
-      let p2KT_Active = false;
-      let p2LS_Active = false;
-
-      if (poses && poses.length > 0) {
-        poses.forEach((pose) => {
-          if (pose.score < 0.15) return;
-          try {
-            const leftShoulder = pose.keypoints[11];
-            const rightShoulder = pose.keypoints[12];
-            const leftWrist = pose.keypoints[15];
-            const rightWrist = pose.keypoints[16];
-            const nose = pose.keypoints[0];
-
-            let poseCenterX = 200;
-            if (leftShoulder && rightShoulder && leftShoulder.score > 0.15 && rightShoulder.score > 0.15) {
-              poseCenterX = (leftShoulder.x + rightShoulder.x) / 2;
-            } else if (nose && nose.score > 0.15) {
-              poseCenterX = nose.x;
-            } else if (leftWrist && leftWrist.score > 0.15) {
-              poseCenterX = leftWrist.x;
-            } else if (rightWrist && rightWrist.score > 0.15) {
-              poseCenterX = rightWrist.x;
-            }
-
-            const isP1 = poseCenterX > 200;
-            const selState = isP1 ? selectionState.player1 : selectionState.player2;
-
-            const getDrawRadius = (wKey) => {
-              return (selState.detectingWeapon === wKey) ? KEEP_RADIUS : TARGET_RADIUS;
-            };
-
-            if (isP1) {
-              const t = TARGETS.player1;
-              const lsRad = getDrawRadius("lightsaber");
-              const gsRad = getDrawRadius("greatsword");
-              const ktRad = getDrawRadius("sword");
-
-              if (rightWrist && leftWrist && rightWrist.score > 0.15 && leftWrist.score > 0.15) {
-                const rDist = Math.hypot(rightWrist.x - t.lightsaber.x, rightWrist.y - t.lightsaber.y);
-                const lDist = Math.hypot(leftWrist.x - t.lightsaber.x, leftWrist.y - t.lightsaber.y);
-                if (rDist <= lsRad && lDist <= lsRad) {
-                  p1LS_Active = true;
-                }
-              }
-              const isRightWristInGS = rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= gsRad;
-              const isLeftWristInGS = leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= gsRad;
-              const isRightWristAboveShoulder = rightShoulder && rightWrist && rightWrist.y < rightShoulder.y;
-              const isLeftWristAboveShoulder = leftShoulder && leftWrist && leftWrist.y < leftShoulder.y;
-
-              if (isRightWristInGS && isRightWristAboveShoulder) p1GS_Active = true;
-              if (isLeftWristInGS && isLeftWristAboveShoulder) p1GS_Active = true;
-
-              const leftElbow = pose.keypoints[13];
-              const rightElbow = pose.keypoints[14];
-              
-              let rightAngle = 180;
-              if (rightShoulder && rightElbow && rightWrist) {
-                rightAngle = getAngle(rightShoulder, rightElbow, rightWrist);
-              }
-              let leftAngle = 180;
-              if (leftShoulder && leftElbow && leftWrist) {
-                leftAngle = getAngle(leftShoulder, leftElbow, leftWrist);
-              }
-
-              if (rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= ktRad && rightAngle <= 130) {
-                p1KT_Active = true;
-              }
-              if (leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= ktRad && leftAngle <= 130) {
-                p1KT_Active = true;
-              }
-            } else {
-              const t = TARGETS.player2;
-              const lsRad = getDrawRadius("lightsaber");
-              const gsRad = getDrawRadius("greatsword");
-              const ktRad = getDrawRadius("sword");
-
-              if (rightWrist && leftWrist && rightWrist.score > 0.15 && leftWrist.score > 0.15) {
-                const rDist = Math.hypot(rightWrist.x - t.lightsaber.x, rightWrist.y - t.lightsaber.y);
-                const lDist = Math.hypot(leftWrist.x - t.lightsaber.x, leftWrist.y - t.lightsaber.y);
-                if (rDist <= lsRad && lDist <= lsRad) {
-                  p2LS_Active = true;
-                }
-              }
-              const isRightWristInGS = rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.greatsword.x, rightWrist.y - t.greatsword.y) <= gsRad;
-              const isLeftWristInGS = leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.greatsword.x, leftWrist.y - t.greatsword.y) <= gsRad;
-              const isRightWristAboveShoulder = rightShoulder && rightWrist && rightWrist.y < rightShoulder.y;
-              const isLeftWristAboveShoulder = leftShoulder && leftWrist && leftWrist.y < leftShoulder.y;
-
-              if (isRightWristInGS && isRightWristAboveShoulder) p2GS_Active = true;
-              if (isLeftWristInGS && isLeftWristAboveShoulder) p2GS_Active = true;
-
-              const leftElbow = pose.keypoints[13];
-              const rightElbow = pose.keypoints[14];
-              
-              let rightAngle = 180;
-              if (rightShoulder && rightElbow && rightWrist) {
-                rightAngle = getAngle(rightShoulder, rightElbow, rightWrist);
-              }
-              let leftAngle = 180;
-              if (leftShoulder && leftElbow && leftWrist) {
-                leftAngle = getAngle(leftShoulder, leftElbow, leftWrist);
-              }
-
-              if (rightWrist && rightWrist.score > 0.15 && Math.hypot(rightWrist.x - t.katana.x, rightWrist.y - t.katana.y) <= ktRad && rightAngle <= 130) {
-                p2KT_Active = true;
-              }
-              if (leftWrist && leftWrist.score > 0.15 && Math.hypot(leftWrist.x - t.katana.x, leftWrist.y - t.katana.y) <= ktRad && leftAngle <= 130) {
-                p2KT_Active = true;
-              }
-            }
-          } catch (poseErr) {
-            console.log("当たり判定エラー:", poseErr);
-          }
-        });
-      }
-
-      const drawTargetCircle = (center, active, defaultFill, defaultStroke, label, weaponKey, pKey) => {
-        try {
-          const sel = selectionState[pKey];
-          const radius = (sel.detectingWeapon === weaponKey) ? KEEP_RADIUS : TARGET_RADIUS;
-
-          ctx.beginPath();
-          ctx.arc(center.x, center.y, radius, 0, 2 * Math.PI);
-          ctx.fillStyle = active ? 'rgba(46, 204, 113, 0.35)' : defaultFill;
-          ctx.strokeStyle = active ? '#2ecc71' : defaultStroke;
-          ctx.lineWidth = active ? 4.5 : 3.5;
-          ctx.fill();
-          ctx.stroke();
-
-          ctx.save();
-          ctx.scale(-1, 1);
-          ctx.font = "bold 12px sans-serif";
-          ctx.fillStyle = "#ffffff";
-          ctx.shadowBlur = 4;
-          ctx.shadowColor = "black";
-          ctx.textAlign = "center";
-          ctx.fillText(label, -center.x, center.y - radius - 6);
-          ctx.restore();
-        } catch (circleErr) {}
-      };
-
-
-    }
+    // (追従型サークルは poses.forEach ループ内で人基準で描画されるため、この静的ループは不要になりました)
 
     // ── 骨格線 ＆ キーポイント描画 ──
     if (poses && poses.length > 0) {
@@ -855,11 +866,11 @@ function drawSkeleton(poses) {
         if (pose.score < 0.15) return;
 
         try {
-          const leftShoulder = pose.keypoints[11];
-          const rightShoulder = pose.keypoints[12];
+          const leftShoulder = pose.keypoints[5];
+          const rightShoulder = pose.keypoints[6];
           const nose = pose.keypoints[0];
-          const leftWrist = pose.keypoints[15];
-          const rightWrist = pose.keypoints[16];
+          const leftWrist = pose.keypoints[9];
+          const rightWrist = pose.keypoints[10];
           
           let poseCenterX = 200;
           if (leftShoulder && rightShoulder && leftShoulder.score > 0.15 && rightShoulder.score > 0.15) {
@@ -900,7 +911,7 @@ function drawSkeleton(poses) {
             try {
               if (kp.score > 0.15) { 
                 ctx.beginPath();
-                const isWrist = (idx === 15 || idx === 16);
+                const isWrist = (idx === 9 || idx === 10);
                 ctx.arc(kp.x, kp.y, isWrist ? 7 : 5, 0, 2 * Math.PI);
                 ctx.fillStyle = isWrist ? '#ff3f34' : '#ffffff';
                 ctx.fill();
@@ -924,6 +935,61 @@ function drawSkeleton(poses) {
           // スイング検出（決定・攻撃）は常時裏でトラッキングを実行
           processMovementLogics(pose, playerKey);
 
+          // 武器選択画面かつselectingフェーズのみ、体に追従する的（サークル）をリアルタイム描画！
+          if (gameStatus === "selecting" && currentActiveScreen === "selectionScreen") {
+            const dTargets = getDynamicTargets(pose);
+            const scale = dTargets.scaleRatio;
+            const selState = selectionState[playerKey];
+
+            // サークル描画共通ヘルパー
+            const drawTargetCircle = (center, active, defaultFill, defaultStroke, label, radius) => {
+              try {
+                ctx.beginPath();
+                ctx.arc(center.x, center.y, radius, 0, 2 * Math.PI);
+                ctx.fillStyle = active ? 'rgba(46, 204, 113, 0.35)' : defaultFill;
+                ctx.strokeStyle = active ? '#2ecc71' : defaultStroke;
+                ctx.lineWidth = active ? 4.5 : 3.5;
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.save();
+                ctx.scale(-1, 1);
+                ctx.font = "bold 12px sans-serif";
+                ctx.fillStyle = "#ffffff";
+                ctx.shadowBlur = 4;
+                ctx.shadowColor = "black";
+                ctx.textAlign = "center";
+                ctx.fillText(label, -center.x, center.y - radius - 6);
+                ctx.restore();
+              } catch (circleErr) {}
+            };
+
+            const getDrawRadius = (wKey) => {
+              if (wKey === "lightsaber") {
+                const base = (selState.detectingWeapon === "lightsaber") ? 65 : 45;
+                return base * scale;
+              }
+              const base = (selState.detectingWeapon === wKey) ? KEEP_RADIUS : TARGET_RADIUS;
+              return base * scale;
+            };
+
+            // 1. 大剣的 (頭の上)
+            const gsRad = getDrawRadius("greatsword");
+            const gsActive = selState.detectingWeapon === "greatsword";
+            drawTargetCircle(dTargets.greatsword, gsActive, 'rgba(255, 170, 0, 0.15)', '#ffaa00', "大剣の的", gsRad);
+
+            // 2. ライトセーバー的 (胸の前)
+            const lsRad = getDrawRadius("lightsaber");
+            const lsActive = selState.detectingWeapon === "lightsaber";
+            drawTargetCircle(dTargets.lightsaber, lsActive, 'rgba(0, 242, 254, 0.15)', '#00f2fe', "光剣の的", lsRad);
+
+            // 3. 刀的 (腰の横)
+            const ktRad = getDrawRadius("sword");
+            const ktActive = selState.detectingWeapon === "sword";
+            const ktTarget = isPlayer1 ? dTargets.katanaRight : dTargets.katanaLeft;
+            drawTargetCircle(ktTarget, ktActive, 'rgba(255, 65, 108, 0.15)', '#ff416c', "刀の的", ktRad);
+          }
+
           // 武器選択画面にいる時のみ、構えの吸い付き判定を行う
           if (gameStatus === "selecting" && currentActiveScreen === "selectionScreen") {
             handleWeaponSelection(pose, playerKey, regStatusEl, cardEl);
@@ -934,34 +1000,44 @@ function drawSkeleton(poses) {
       });
     }
 
+    // バトル終了時のホーム戻りバンザイ監視を稼働
+    checkHomeReturnGesture(poses);
+
     ctx.restore();
   } catch (globalDrawErr) {
     console.log("drawSkeleton 全体エラー:", globalDrawErr);
   }
 }
 
-// ── 💡 公式生SDKのコールバック処理 ──
-function onPoseResults(results) {
+// ── 💡 MoveNet 検出器インスタンス ──
+let poseDetector = null;
+
+// ── 💡 2人同時検出ループ（Webカメラフレーム毎に実行） ──
+async function detectionLoop() {
   if (!isDetecting) return;
   
   try {
-    const poses = [];
+    // 2人同時にポーズを推定
+    const rawPoses = await poseDetector.estimatePoses(videoElement, {
+      maxPoses: 2, // 同時に最大2人まで追跡
+      flipHorizontal: false
+    });
     
-    // results.poseLandmarks に全身33点のキーポイントが 0.0 〜 1.0 で入る
-    if (results.poseLandmarks) {
-      const formattedPose = {
-        score: 1.0,
-        keypoints: results.poseLandmarks.map((lm) => ({
-          x: lm.x * 400,
-          y: lm.y * 300,
-          score: 1.0 // 見切れや隠れ部位による描画ロストを防ぐため、キーポイントのスコアを強制的に1.0に固定！
+    const poses = rawPoses.map(pose => {
+      return {
+        score: pose.score,
+        keypoints: pose.keypoints.map(kp => ({
+          x: kp.x,
+          y: kp.y,
+          score: kp.score || 1.0 // 描画ロスト防止
         }))
       };
-      
-      poses.push(formattedPose);
-      
+    }).slice(0, 2); // 確実に最大2人までに制限！
+    
+    // 検出インジケーターと状態の更新
+    if (poses.length > 0) {
       statusDot.classList.add('active');
-      statusText.textContent = "骨格検出中 (公式生エンジンロックオン)";
+      statusText.textContent = `骨格検出中 (同時${poses.length}人ロックオン)`;
     } else {
       statusDot.classList.remove('active');
       statusText.textContent = "カメラの前に立ってください";
@@ -971,10 +1047,15 @@ function onPoseResults(results) {
       }
     }
     
-    // 的の強制描画 ＆ 骨格の描画を確実に実行
+    // 骨格および的の強制描画を実行！
     drawSkeleton(poses);
   } catch (err) {
-    console.log("onPoseResults エラー:", err);
+    console.log("detectionLoop エラー:", err);
+  }
+  
+  // 次フレームの呼び出し
+  if (isDetecting) {
+    requestAnimationFrame(detectionLoop);
   }
 }
 
@@ -987,47 +1068,51 @@ function resetSelectionIfAbsent(playerKey, regStatusEl, cardEl) {
   } catch (e) {}
 }
 
-// ── 検出器初期化 ──
+// ── 検出器初期化（MoveNet MultiPose 超安定マルチポーズエンジン） ──
 async function initPoseBattleSystem() {
   try {
-    setupStatus.textContent = "Official MediaPipe Pose 超安定全身エンジンを起動中...";
+    setupStatus.textContent = "Firebase環境変数をロード中...";
+    if (!db) {
+      const firebaseConfig = await loadFirebaseConfig();
+      app = initializeApp(firebaseConfig);
+      db = getFirestore(app);
+    }
+    setupStatus.textContent = "MoveNet 超軽量マルチポーズエンジンをロード中...";
 
     // SDKのロード状態を確実にチェックし、親切なエラーを投げる
-    if (typeof Pose === 'undefined' || typeof Camera === 'undefined') {
-      throw new Error("MediaPipe SDK (Pose または Camera) がブラウザにロードされていません。インターネット接続状態を確認するか、ブラウザキャッシュをクリアして再読み込みしてください。");
+    if (typeof poseDetection === 'undefined' || typeof tf === 'undefined') {
+      throw new Error("MoveNet (poseDetection) または TensorFlow.js がブラウザにロードされていません。インターネット接続状態を確認してください。");
     }
 
-    // 最高の起動率・描画安定性を誇るバニラ（生の公式SDK）を初期化
-    poseEngine = new Pose({
-      locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+    // TensorFlow backend WebGL の初期化
+    await tf.ready();
+    await tf.setBackend('webgl');
+
+    // MoveNet MultiPose 検出器の生成
+    poseDetector = await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      {
+        modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,
+        enableSmoothing: true
       }
-    });
-
-    poseEngine.setOptions({
-      modelComplexity: 1, // 0: Lite, 1: Full
-      smoothLandmarks: true,
-      enableSegmentation: false,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
-
-    poseEngine.onResults(onPoseResults);
+    );
 
     setupStatus.textContent = "Webカメラを起動中...";
 
-    // MediaPipe 公式 Camera ユーティリティでアスペクト比・ブラウザ互換を100%超安定化
-    cameraEngine = new Camera(videoElement, {
-      onFrame: async () => {
-        try {
-          await poseEngine.send({ image: videoElement });
-        } catch (sendErr) {}
-      },
-      width: 400,
-      height: 300
+    // 標準のMediaDevicesを用いて、400x300アスペクト比でカメラ取得
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 400, height: 300, facingMode: "user" },
+      audio: false
     });
-
-    await cameraEngine.start();
+    videoElement.srcObject = stream;
+    
+    // カメラのストリーム再生開始時に検出ループを始動する
+    await new Promise((resolve) => {
+      videoElement.onloadedmetadata = () => {
+        videoElement.play();
+        resolve();
+      };
+    });
 
     setupStatus.textContent = "ゲーム開始準備中...";
     gameStatus = "selecting";
@@ -1041,13 +1126,16 @@ async function initPoseBattleSystem() {
       match_status: "selecting",
       p1_ready: false,
       p2_ready: false,
-      player1_score: 0,
-      player2_score: 0
+      p1_score: 0,
+      p2_score: 0
     }, { merge: true });
 
     setupFirestoreListener();
 
     isDetecting = true;
+    
+    // 検出ループを始動！
+    requestAnimationFrame(detectionLoop);
 
     setupOverlay.style.opacity = 0;
     setTimeout(() => setupOverlay.classList.add('hidden'), 500);
@@ -1059,6 +1147,457 @@ async function initPoseBattleSystem() {
 }
 
 startBtn.addEventListener('click', initPoseBattleSystem);
+
+// ── 🙌 ホーム戻りバンザイジェスチャーステート ──
+const homeReturnState = {
+  accumulatedTime: 0,
+  lastActiveTime: 0,
+  progress: 0
+};
+
+// 両手を上げている（バンザイ）のジェスチャー判定
+function isHandsUp(pose) {
+  try {
+    const leftShoulder = pose.keypoints[5];
+    const rightShoulder = pose.keypoints[6];
+    const leftWrist = pose.keypoints[9];
+    const rightWrist = pose.keypoints[10];
+    const nose = pose.keypoints[0];
+
+    if (!leftWrist || !rightWrist || leftWrist.score < 0.15 || rightWrist.score < 0.15) {
+      return false;
+    }
+
+    let baseRefY = 150;
+    if (leftShoulder && rightShoulder && leftShoulder.score > 0.15 && rightShoulder.score > 0.15) {
+      baseRefY = (leftShoulder.y + rightShoulder.y) / 2;
+    } else if (nose && nose.score > 0.15) {
+      baseRefY = nose.y + 30;
+    }
+
+    // 両手首が肩または鼻の基準座標よりも40px以上高いこと
+    return leftWrist.y < (baseRefY - 40) && rightWrist.y < (baseRefY - 40);
+  } catch (e) {
+    return false;
+  }
+}
+
+// バトル終了後のホーム戻りジェスチャーの毎フレーム判定
+function checkHomeReturnGesture(poses) {
+  if (gameStatus !== "finished" || !isBattleEndSequenceTriggered) return;
+  
+  const banner = document.getElementById("home-return-banner");
+  if (!banner || !banner.classList.contains("active")) return;
+
+  let anyPlayerHandsUp = false;
+  if (poses && poses.length > 0) {
+    poses.forEach(pose => {
+      if (pose.score > 0.15 && isHandsUp(pose)) {
+        anyPlayerHandsUp = true;
+      }
+    });
+  }
+
+  const progressEl = document.getElementById("home-return-progress");
+
+  if (anyPlayerHandsUp) {
+    const now = Date.now();
+    if (homeReturnState.lastActiveTime === 0) {
+      homeReturnState.lastActiveTime = now;
+    }
+    const dt = now - homeReturnState.lastActiveTime;
+    homeReturnState.lastActiveTime = now;
+
+    homeReturnState.accumulatedTime = Math.min(1500, homeReturnState.accumulatedTime + dt);
+    homeReturnState.progress = Math.min(100, Math.floor((homeReturnState.accumulatedTime / 1500) * 100));
+
+    if (progressEl) {
+      progressEl.textContent = `RESETTING... ${homeReturnState.progress}%`;
+    }
+
+    if (homeReturnState.accumulatedTime >= 1500) {
+      resetToHome();
+    }
+  } else {
+    const now = Date.now();
+    const dt = homeReturnState.lastActiveTime ? (now - homeReturnState.lastActiveTime) : 0;
+    homeReturnState.lastActiveTime = now;
+
+    homeReturnState.accumulatedTime = Math.max(0, homeReturnState.accumulatedTime - dt * 0.5);
+    homeReturnState.progress = Math.min(100, Math.floor((homeReturnState.accumulatedTime / 1500) * 100));
+
+    if (progressEl) {
+      if (homeReturnState.progress > 0) {
+        progressEl.textContent = `RESETTING... ${homeReturnState.progress}%`;
+      } else {
+        progressEl.textContent = "🙌 両手を上げ続けるとホームに戻ります";
+      }
+    }
+  }
+}
+
+// 全ての状態をリセットしてホーム（スタート画面）へ戻す
+async function resetToHome() {
+  console.log("🔄 ホーム（スタート画面）へリセットします 🔄");
+  
+  isBattleEndSequenceTriggered = false;
+  isTransitioningToBattle = false;
+  
+  homeReturnState.accumulatedTime = 0;
+  homeReturnState.lastActiveTime = 0;
+  homeReturnState.progress = 0;
+  
+  gameStatus = "selecting";
+  timeRemaining = 30;
+  
+  p1Score = 0;
+  p2Score = 0;
+  p1ScoreEl.textContent = 0;
+  p2ScoreEl.textContent = 0;
+
+  // 選択進捗の初期化
+  selectionState.player1 = { locked: false, selectedWeapon: null, detectingWeapon: null, lastActiveTime: 0, accumulatedTime: 0, progress: 0, lostStartTime: 0 };
+  selectionState.player2 = { locked: false, selectedWeapon: null, detectingWeapon: null, lastActiveTime: 0, accumulatedTime: 0, progress: 0, lostStartTime: 0 };
+
+  const previewP1 = document.getElementById("previewP1");
+  const previewP2 = document.getElementById("previewP2");
+  if (previewP1) previewP1.textContent = "選択中...";
+  if (previewP2) previewP2.textContent = "選択中...";
+
+  const battleWeaponP1 = document.getElementById("battleWeaponP1");
+  const battleWeaponP2 = document.getElementById("battleWeaponP2");
+  if (battleWeaponP1) battleWeaponP1.textContent = "未確定";
+  if (battleWeaponP2) battleWeaponP2.textContent = "未確定";
+
+  const p1CardElement = document.getElementById("p1-battle-card");
+  const p2CardElement = document.getElementById("p2-battle-card");
+  if (p1CardElement) {
+    p1CardElement.classList.remove("winner-active");
+    p1CardElement.style.opacity = "1";
+    p1CardElement.style.pointerEvents = "auto";
+    const banner = p1CardElement.querySelector(".winner-banner");
+    if (banner) banner.remove();
+  }
+  if (p2CardElement) {
+    p2CardElement.classList.remove("winner-active");
+    p2CardElement.style.opacity = "1";
+    p2CardElement.style.pointerEvents = "auto";
+    const banner = p2CardElement.querySelector(".winner-banner");
+    if (banner) banner.remove();
+  }
+
+  // 📸 写真関連のクリーンアップ
+  if (photoCaptureTimeout) clearTimeout(photoCaptureTimeout);
+  capturedPhotoData = null;
+  document.querySelectorAll(".winner-photo-container").forEach(c => c.remove());
+
+  const drawBanner = document.querySelector(".draw-banner");
+  if (drawBanner) drawBanner.remove();
+  
+  const returnBanner = document.getElementById("home-return-banner");
+  if (returnBanner) returnBanner.remove();
+  
+  document.querySelectorAll(".slice-container").forEach(c => c.remove());
+
+  // 画面遷移
+  switchScreen('startScreen');
+  updatePhaseUI();
+
+  // モーションキャプチャ再起動
+  isDetecting = true;
+  requestAnimationFrame(detectionLoop);
+
+  // Firestoreリセット
+  try {
+    const battleDocRef = doc(db, "shinken_rooms", "battle");
+    await setDoc(battleDocRef, {
+      status: "selecting",
+      match_status: "selecting",
+      p1_ready: false,
+      p2_ready: false,
+      p1_score: 0,
+      p2_score: 0,
+      winner: ""
+    }, { merge: true });
+  } catch (e) {
+    console.error("Firestoreリセットエラー:", e);
+  }
+}
+
+// ── 📸 バトル中（15秒経過時点）の自動写真撮影（キャプチャ） ──
+function captureBattlePhoto() {
+  if (gameStatus !== "playing") return;
+  console.log("📸 シャッターチャンス！自動撮影を実行します 📸");
+
+  try {
+    const captureCanvas = document.createElement("canvas");
+    captureCanvas.width = videoElement.videoWidth || 400;
+    captureCanvas.height = videoElement.videoHeight || 300;
+    const captureCtx = captureCanvas.getContext("2d");
+
+    // ビデオ表示と全く同じミラー反転設定で Canvas に複写
+    captureCtx.translate(captureCanvas.width, 0);
+    captureCtx.scale(-1, 1);
+    captureCtx.drawImage(videoElement, 0, 0, captureCanvas.width, captureCanvas.height);
+
+    capturedPhotoData = captureCanvas.toDataURL("image/jpeg", 0.85);
+    console.log("📸 バトル写真のキャプチャに成功しました 📸");
+
+    // 激写フラッシュ演出（画面全体を一瞬白くする）
+    document.body.classList.add("photo-flash");
+    
+    // シャッター音的な効果音（刀の音 katana）を再生
+    playWeaponSound("katana");
+
+    setTimeout(() => {
+      document.body.classList.remove("photo-flash");
+    }, 150);
+
+  } catch (e) {
+    console.error("写真キャプチャエラー:", e);
+  }
+}
+
+// ── 📸 勝者側の領域を Canvas でトリミング ──
+function cropWinnerPhoto(playerNum) {
+  if (!capturedPhotoData) return Promise.resolve(null);
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const cropCanvas = document.createElement("canvas");
+        cropCanvas.width = 200;
+        cropCanvas.height = 240;
+        const cropCtx = cropCanvas.getContext("2d");
+
+        // 元画像（ミラー全体 400x300）から勝者側（左半分または右半分）を切り抜き
+        // P1（画面左）＝ ミラー画像の左半分 (x: 0〜200)
+        // P2（画面右）＝ ミラー画像の右半分 (x: 200〜400)
+        const sourceX = playerNum === 1 ? 0 : 200;
+        const sourceY = 30; // 肩から顔が綺麗に収まる範囲
+        const sourceWidth = 200;
+        const sourceHeight = 240;
+
+        cropCtx.drawImage(
+          img,
+          sourceX, sourceY, sourceWidth, sourceHeight,
+          0, 0, cropCanvas.width, cropCanvas.height
+        );
+
+        resolve(cropCanvas.toDataURL("image/jpeg", 0.9));
+      } catch (e) {
+        console.error("トリミングエラー:", e);
+        resolve(capturedPhotoData); // エラー時は全体を返す
+      }
+    };
+    img.onerror = () => {
+      resolve(null);
+    };
+    img.src = capturedPhotoData;
+  });
+}
+
+// ── 💀 バトル終了時の勝利演出（敗者パネル両断・落下 ＆ 勝者お祝い） ──
+let isBattleEndSequenceTriggered = false; // 二重実行防止用
+
+async function triggerBattleEndSequence() {
+  if (isBattleEndSequenceTriggered) return;
+  isBattleEndSequenceTriggered = true;
+
+  console.log("🏆 バトル終了演出シーケンス開始 🏆");
+  
+  // ゲームの状態を完全に終了にする
+  gameStatus = "finished";
+  updatePhaseUI();
+  if (timerInterval) clearInterval(timerInterval);
+  isDetecting = false;
+
+  // 1. スコア判定
+  const p1FinalScore = p1Score;
+  const p2FinalScore = p2Score;
+  console.log(`最終スコア - P1: ${p1FinalScore} / P2: ${p2FinalScore}`);
+
+  const p1CardElement = document.getElementById("p1-battle-card");
+  const p2CardElement = document.getElementById("p2-battle-card");
+  const arena = document.querySelector(".battle-arena");
+
+  if (!p1CardElement || !p2CardElement || !arena) {
+    console.error("バトルパネルの要素が見つかりません。");
+    return;
+  }
+
+  // バトル終了の共通効果音（大剣の一撃音など）
+  playWeaponSound("taiken");
+
+  if (p1FinalScore === p2FinalScore) {
+    // ── 引き分け（DRAW）の場合 ──
+    console.log("判定：引き分け");
+    
+    // DRAW バナーを生成
+    const drawBanner = document.createElement("div");
+    drawBanner.className = "draw-banner";
+    drawBanner.textContent = "DRAW";
+    arena.appendChild(drawBanner);
+
+    // 引き分け時のサウンド
+    setTimeout(() => {
+      playWeaponSound("katana");
+    }, 400);
+
+  } else {
+    // ── 勝敗が決まった場合 ──
+    const isP1Winner = p1FinalScore > p2FinalScore;
+    const winnerCard = isP1Winner ? p1CardElement : p2CardElement;
+    const loserCard = isP1Winner ? p2CardElement : p1CardElement;
+    const winnerName = isP1Winner ? "PLAYER 1" : "PLAYER 2";
+    const loserName = isP1Winner ? "PLAYER 2" : "PLAYER 1";
+    const winnerWeapon = isP1Winner ? (selectionState.player1.selectedWeapon || "sword") : (selectionState.player2.selectedWeapon || "sword");
+
+    console.log(`勝者: ${winnerName} / 敗者: ${loserName}`);
+
+    // (1) 敗者カードに真っ二つのスライス線を走らせる
+    const loserRect = loserCard.getBoundingClientRect();
+    const slash = document.createElement('div');
+    slash.className = 'undertale-slash';
+    
+    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    
+    slash.style.position = 'absolute';
+    slash.style.left = (loserRect.left + scrollLeft) + 'px';
+    slash.style.top = (loserRect.top + scrollTop) + 'px';
+    slash.style.width = loserRect.width + 'px';
+    slash.style.height = loserRect.height + 'px';
+    slash.style.pointerEvents = 'none';
+    slash.style.zIndex = '9999';
+    
+    const line = document.createElement('div');
+    line.className = 'undertale-slash-line';
+    line.style.backgroundColor = '#ff416c'; // 敗者のスライス線はネオンレッド
+    line.style.boxShadow = '0 0 20px #ff003c, 0 0 10px #fff';
+    slash.appendChild(line);
+    document.body.appendChild(slash);
+
+    // 敗者カードの被弾シェイク
+    loserCard.classList.add('undertale-hit-shake');
+
+    // (2) 250ms後に、敗者カードをクリップパスで分割したダミー破片要素に置き換え
+    setTimeout(() => {
+      slash.remove();
+      loserCard.classList.remove('undertale-hit-shake');
+      
+      // 元のカードを透明にして見えなくする
+      loserCard.style.opacity = "0";
+      loserCard.style.pointerEvents = "none";
+
+      // 破片用コンテナを生成
+      const sliceContainer = document.createElement("div");
+      sliceContainer.className = "slice-container";
+      sliceContainer.style.left = loserCard.offsetLeft + "px";
+      sliceContainer.style.top = loserCard.offsetTop + "px";
+      sliceContainer.style.width = loserCard.offsetWidth + "px";
+      sliceContainer.style.height = loserCard.offsetHeight + "px";
+
+      // 右上破片の生成
+      const pieceTop = document.createElement("div");
+      pieceTop.className = "slice-piece piece-top";
+      pieceTop.innerHTML = loserCard.innerHTML;
+      
+      // 左下破片の生成
+      const pieceBottom = document.createElement("div");
+      pieceBottom.className = "slice-piece piece-bottom";
+      pieceBottom.innerHTML = loserCard.innerHTML;
+
+      sliceContainer.appendChild(pieceTop);
+      sliceContainer.appendChild(pieceBottom);
+      arena.appendChild(sliceContainer);
+
+      // 両断音を再生
+      playWeaponSound("taiken");
+
+      // 破片が落ちきった後のゴミ掃除 (1.5秒後)
+      setTimeout(() => {
+        sliceContainer.remove();
+      }, 1500);
+
+    }, 250);
+
+    // (3) 敗者落下中 (700ms後) に勝者側の超プレミアムお祝い演出を始動
+    setTimeout(async () => {
+      // 勝者カードを光り輝かせて大きくする
+      winnerCard.classList.add("winner-active");
+
+      // 王冠 ＆ WINNER バナーをポップアップ
+      const banner = document.createElement("div");
+      banner.className = "winner-banner";
+      banner.innerHTML = "👑 WINNER 👑";
+      winnerCard.appendChild(banner);
+
+      // 📸 勝者の写真をトリミングしてカード内に挿入！
+      if (capturedPhotoData) {
+        const croppedSrc = await cropWinnerPhoto(isP1Winner ? 1 : 2);
+        if (croppedSrc) {
+          const photoContainer = document.createElement("div");
+          photoContainer.className = "winner-photo-container";
+          photoContainer.innerHTML = `
+            <div class="winner-photo-title">BATTLE MOMENT</div>
+            <img class="winner-photo-neon" src="${croppedSrc}" alt="Winner Photo" />
+          `;
+          winnerCard.appendChild(photoContainer);
+          
+          requestAnimationFrame(() => {
+            photoContainer.classList.add("active");
+          });
+        }
+      }
+
+      // 勝者の武器効果音でお祝い！
+      playWeaponSound(winnerWeapon);
+
+      // 振動 (対応端末のみ)
+      if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200, 100, 300]);
+      }
+    }, 700);
+  }
+
+  // 2. Firestoreに勝敗ステータスを書き込む
+  try {
+    const battleDocRef = doc(db, "shinken_rooms", "battle");
+    await setDoc(battleDocRef, {
+      status: "finished",
+      match_status: "finished",
+      winner: p1FinalScore === p2FinalScore ? "draw" : (p1FinalScore > p2FinalScore ? "player1" : "player2")
+    }, { merge: true });
+  } catch (e) {
+    console.error("Firestore終了ステータス書き込みエラー:", e);
+  }
+
+  // 3. ホームへ戻るための案内バナーを表示する（勝利演出等の完了を見計らってディレイ表示）
+  setTimeout(() => {
+    const existing = document.getElementById("home-return-banner");
+    if (existing) existing.remove();
+
+    const returnBanner = document.createElement("div");
+    returnBanner.id = "home-return-banner";
+    returnBanner.className = "home-return-banner";
+    returnBanner.innerHTML = `
+      🙌 ホームに戻るには両手を上げてください
+      <span id="home-return-progress" class="home-return-progress">🙌 両手を上げ続けるとホームに戻ります</span>
+    `;
+    arena.appendChild(returnBanner);
+
+    // 次のフレームでアクティブにして滑らかにフェードイン
+    requestAnimationFrame(() => {
+      returnBanner.classList.add("active");
+    });
+
+    // 案内完了のため、再度モーションキャプチャのポーズ検知を一時的にONにし、バンザイ監視を稼働する
+    isDetecting = true;
+    requestAnimationFrame(detectionLoop);
+  }, 1800);
+}
 
 // ── 💡 1回生UI合体用の受け皿関数 ──
 export function updateP1HealthGauge(score) {
@@ -1135,8 +1674,8 @@ function setupFirestoreListener() {
         }
 
         // スコア同期時の演出＆重複防止ロジック
-        if (data.player1_score !== undefined && data.player1_score !== p1Score && gameStatus === "playing") {
-          p1Score = data.player1_score;
+        if (data.p1_score !== undefined && data.p1_score !== p1Score && gameStatus === "playing") {
+          p1Score = data.p1_score;
           p1ScoreEl.textContent = p1Score;
           updateP1HealthGauge(p1Score);
 
@@ -1152,8 +1691,8 @@ function setupFirestoreListener() {
           }
         }
 
-        if (data.player2_score !== undefined && data.player2_score !== p2Score && gameStatus === "playing") {
-          p2Score = data.player2_score;
+        if (data.p2_score !== undefined && data.p2_score !== p2Score && gameStatus === "playing") {
+          p2Score = data.p2_score;
           p2ScoreEl.textContent = p2Score;
           updateP2HealthGauge(p2Score);
 
@@ -1170,10 +1709,7 @@ function setupFirestoreListener() {
         }
 
         if ((data.status === "finished" || data.match_status === "finished") && gameStatus !== "finished") {
-          gameStatus = "finished";
-          updatePhaseUI();
-          if (timerInterval) clearInterval(timerInterval);
-          isDetecting = false;
+          triggerBattleEndSequence();
         }
       }
     });
