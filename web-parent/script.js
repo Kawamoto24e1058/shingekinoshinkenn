@@ -1238,6 +1238,26 @@ function checkHomeReturnGesture(poses) {
   }
 }
 
+// Firestoreを完全に初期化（クリーンアップ）する非同期関数
+async function resetToHomeStatus() {
+  try {
+    const battleDocRef = doc(db, "shinken_rooms", "battle");
+    await setDoc(battleDocRef, {
+      status: "selecting",
+      match_status: "selecting",
+      p1_weapon: "",
+      p2_weapon: "",
+      p1_ready: false,
+      p2_ready: false,
+      p1_score: 0,
+      p2_score: 0
+    }); // merge: true を指定せず、ドキュメント全体をクリーンに真っさら上書き初期化！
+    console.log("[Firestoreクリーンアップ] shinken_rooms/battle を完全に初期化しました。");
+  } catch (e) {
+    console.error("[Firestoreクリーンアップ] エラー:", e);
+  }
+}
+
 // 全ての状態をリセットしてホーム（スタート画面）へ戻す
 async function resetToHome() {
   console.log("🔄 ホーム（スタート画面）へリセットします 🔄");
@@ -1310,20 +1330,7 @@ async function resetToHome() {
   requestAnimationFrame(detectionLoop);
 
   // Firestoreリセット
-  try {
-    const battleDocRef = doc(db, "shinken_rooms", "battle");
-    await setDoc(battleDocRef, {
-      status: "selecting",
-      match_status: "selecting",
-      p1_ready: false,
-      p2_ready: false,
-      p1_score: 0,
-      p2_score: 0,
-      winner: ""
-    }, { merge: true });
-  } catch (e) {
-    console.error("Firestoreリセットエラー:", e);
-  }
+  await resetToHomeStatus();
 }
 
 // ── 📸 バトル中（15秒経過時点）の自動写真撮影（キャプチャ） ──
@@ -1722,7 +1729,11 @@ function setupFirestoreListener() {
 
 // ── 🚀 起動時に自動でモーションキャプチャー（MediaPipe ＆ カメラ）を起動 ──
 document.addEventListener('DOMContentLoaded', () => {
-  console.log("アプリ起動：モーションキャプチャーを自動起動します。");
+  console.log("アプリ起動：Firestoreをクリーンアップし、モーションキャプチャーを起動します。");
+  
+  // 起動時のFirestore完全クリーンアップ
+  resetToHomeStatus();
+  
   setTimeout(() => {
     initPoseBattleSystem().catch(err => {
       console.error("自動初期化エラー（ユーザー操作待ちなどの可能性）:", err);
