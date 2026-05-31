@@ -984,6 +984,9 @@ function drawSkeleton(poses) {
       });
     }
 
+    // バトル終了時のホーム戻りバンザイ監視を稼働
+    checkHomeReturnGesture(poses);
+
     ctx.restore();
   } catch (globalDrawErr) {
     console.log("drawSkeleton 全体エラー:", globalDrawErr);
@@ -1128,6 +1131,177 @@ async function initPoseBattleSystem() {
 }
 
 startBtn.addEventListener('click', initPoseBattleSystem);
+
+// ── 🙌 ホーム戻りバンザイジェスチャーステート ──
+const homeReturnState = {
+  accumulatedTime: 0,
+  lastActiveTime: 0,
+  progress: 0
+};
+
+// 両手を上げている（バンザイ）のジェスチャー判定
+function isHandsUp(pose) {
+  try {
+    const leftShoulder = pose.keypoints[5];
+    const rightShoulder = pose.keypoints[6];
+    const leftWrist = pose.keypoints[9];
+    const rightWrist = pose.keypoints[10];
+    const nose = pose.keypoints[0];
+
+    if (!leftWrist || !rightWrist || leftWrist.score < 0.15 || rightWrist.score < 0.15) {
+      return false;
+    }
+
+    let baseRefY = 150;
+    if (leftShoulder && rightShoulder && leftShoulder.score > 0.15 && rightShoulder.score > 0.15) {
+      baseRefY = (leftShoulder.y + rightShoulder.y) / 2;
+    } else if (nose && nose.score > 0.15) {
+      baseRefY = nose.y + 30;
+    }
+
+    // 両手首が肩または鼻の基準座標よりも40px以上高いこと
+    return leftWrist.y < (baseRefY - 40) && rightWrist.y < (baseRefY - 40);
+  } catch (e) {
+    return false;
+  }
+}
+
+// バトル終了後のホーム戻りジェスチャーの毎フレーム判定
+function checkHomeReturnGesture(poses) {
+  if (gameStatus !== "finished" || !isBattleEndSequenceTriggered) return;
+  
+  const banner = document.getElementById("home-return-banner");
+  if (!banner || !banner.classList.contains("active")) return;
+
+  let anyPlayerHandsUp = false;
+  if (poses && poses.length > 0) {
+    poses.forEach(pose => {
+      if (pose.score > 0.15 && isHandsUp(pose)) {
+        anyPlayerHandsUp = true;
+      }
+    });
+  }
+
+  const progressEl = document.getElementById("home-return-progress");
+
+  if (anyPlayerHandsUp) {
+    const now = Date.now();
+    if (homeReturnState.lastActiveTime === 0) {
+      homeReturnState.lastActiveTime = now;
+    }
+    const dt = now - homeReturnState.lastActiveTime;
+    homeReturnState.lastActiveTime = now;
+
+    homeReturnState.accumulatedTime = Math.min(1500, homeReturnState.accumulatedTime + dt);
+    homeReturnState.progress = Math.min(100, Math.floor((homeReturnState.accumulatedTime / 1500) * 100));
+
+    if (progressEl) {
+      progressEl.textContent = `RESETTING... ${homeReturnState.progress}%`;
+    }
+
+    if (homeReturnState.accumulatedTime >= 1500) {
+      resetToHome();
+    }
+  } else {
+    const now = Date.now();
+    const dt = homeReturnState.lastActiveTime ? (now - homeReturnState.lastActiveTime) : 0;
+    homeReturnState.lastActiveTime = now;
+
+    homeReturnState.accumulatedTime = Math.max(0, homeReturnState.accumulatedTime - dt * 0.5);
+    homeReturnState.progress = Math.min(100, Math.floor((homeReturnState.accumulatedTime / 1500) * 100));
+
+    if (progressEl) {
+      if (homeReturnState.progress > 0) {
+        progressEl.textContent = `RESETTING... ${homeReturnState.progress}%`;
+      } else {
+        progressEl.textContent = "🙌 両手を上げ続けるとホームに戻ります";
+      }
+    }
+  }
+}
+
+// 全ての状態をリセットしてホーム（スタート画面）へ戻す
+async function resetToHome() {
+  console.log("🔄 ホーム（スタート画面）へリセットします 🔄");
+  
+  isBattleEndSequenceTriggered = false;
+  isTransitioningToBattle = false;
+  
+  homeReturnState.accumulatedTime = 0;
+  homeReturnState.lastActiveTime = 0;
+  homeReturnState.progress = 0;
+  
+  gameStatus = "selecting";
+  timeRemaining = 30;
+  
+  p1Score = 0;
+  p2Score = 0;
+  p1ScoreEl.textContent = 0;
+  p2ScoreEl.textContent = 0;
+
+  // 選択進捗の初期化
+  selectionState.player1 = { locked: false, selectedWeapon: null, detectingWeapon: null, lastActiveTime: 0, accumulatedTime: 0, progress: 0, lostStartTime: 0 };
+  selectionState.player2 = { locked: false, selectedWeapon: null, detectingWeapon: null, lastActiveTime: 0, accumulatedTime: 0, progress: 0, lostStartTime: 0 };
+
+  const previewP1 = document.getElementById("previewP1");
+  const previewP2 = document.getElementById("previewP2");
+  if (previewP1) previewP1.textContent = "選択中...";
+  if (previewP2) previewP2.textContent = "選択中...";
+
+  const battleWeaponP1 = document.getElementById("battleWeaponP1");
+  const battleWeaponP2 = document.getElementById("battleWeaponP2");
+  if (battleWeaponP1) battleWeaponP1.textContent = "未確定";
+  if (battleWeaponP2) battleWeaponP2.textContent = "未確定";
+
+  const p1CardElement = document.getElementById("p1-battle-card");
+  const p2CardElement = document.getElementById("p2-battle-card");
+  if (p1CardElement) {
+    p1CardElement.classList.remove("winner-active");
+    p1CardElement.style.opacity = "1";
+    p1CardElement.style.pointerEvents = "auto";
+    const banner = p1CardElement.querySelector(".winner-banner");
+    if (banner) banner.remove();
+  }
+  if (p2CardElement) {
+    p2CardElement.classList.remove("winner-active");
+    p2CardElement.style.opacity = "1";
+    p2CardElement.style.pointerEvents = "auto";
+    const banner = p2CardElement.querySelector(".winner-banner");
+    if (banner) banner.remove();
+  }
+
+  const drawBanner = document.querySelector(".draw-banner");
+  if (drawBanner) drawBanner.remove();
+  
+  const returnBanner = document.getElementById("home-return-banner");
+  if (returnBanner) returnBanner.remove();
+  
+  document.querySelectorAll(".slice-container").forEach(c => c.remove());
+
+  // 画面遷移
+  switchScreen('startScreen');
+  updatePhaseUI();
+
+  // モーションキャプチャ再起動
+  isDetecting = true;
+  requestAnimationFrame(detectionLoop);
+
+  // Firestoreリセット
+  try {
+    const battleDocRef = doc(db, "shinken_rooms", "battle");
+    await setDoc(battleDocRef, {
+      status: "selecting",
+      match_status: "selecting",
+      p1_ready: false,
+      p2_ready: false,
+      player1_score: 0,
+      player2_score: 0,
+      winner: ""
+    }, { merge: true });
+  } catch (e) {
+    console.error("Firestoreリセットエラー:", e);
+  }
+}
 
 // ── 💀 バトル終了時の勝利演出（敗者パネル両断・落下 ＆ 勝者お祝い） ──
 let isBattleEndSequenceTriggered = false; // 二重実行防止用
@@ -1286,6 +1460,30 @@ async function triggerBattleEndSequence() {
   } catch (e) {
     console.error("Firestore終了ステータス書き込みエラー:", e);
   }
+
+  // 3. ホームへ戻るための案内バナーを表示する（勝利演出等の完了を見計らってディレイ表示）
+  setTimeout(() => {
+    const existing = document.getElementById("home-return-banner");
+    if (existing) existing.remove();
+
+    const returnBanner = document.createElement("div");
+    returnBanner.id = "home-return-banner";
+    returnBanner.className = "home-return-banner";
+    returnBanner.innerHTML = `
+      🙌 ホームに戻るには両手を上げてください
+      <span id="home-return-progress" class="home-return-progress">🙌 両手を上げ続けるとホームに戻ります</span>
+    `;
+    arena.appendChild(returnBanner);
+
+    // 次のフレームでアクティブにして滑らかにフェードイン
+    requestAnimationFrame(() => {
+      returnBanner.classList.add("active");
+    });
+
+    // 案内完了のため、再度モーションキャプチャのポーズ検知を一時的にONにし、バンザイ監視を稼働する
+    isDetecting = true;
+    requestAnimationFrame(detectionLoop);
+  }, 1800);
 }
 
 // ── 💡 1回生UI合体用の受け皿関数 ──

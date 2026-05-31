@@ -960,6 +960,38 @@
             0% { opacity: 0.7; }
             100% { opacity: 1.0; filter: brightness(1.2); }
         }
+
+        /* ── 🙌 ホーム戻り案内バナースタイル ── */
+        .home-return-banner {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%) scale(0);
+            background: linear-gradient(135deg, rgba(16, 23, 37, 0.95) 0%, rgba(8, 12, 21, 0.98) 100%);
+            border: 2px solid var(--neon-cyan);
+            box-shadow: 0 0 25px rgba(0, 242, 254, 0.4);
+            border-radius: 12px;
+            padding: 15px 40px;
+            font-family: 'Space Grotesk', 'Noto Sans JP', sans-serif;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #ffffff;
+            text-align: center;
+            z-index: 250;
+            pointer-events: none;
+            white-space: nowrap;
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .home-return-banner.active {
+            transform: translateX(-50%) scale(1.0);
+        }
+        .home-return-progress {
+            display: block;
+            font-size: 0.9rem;
+            color: var(--neon-yellow);
+            margin-top: 5px;
+            font-family: 'Orbitron', sans-serif;
+        }
     </style>
 </head>
 <body onclick="unlockAudio()">
