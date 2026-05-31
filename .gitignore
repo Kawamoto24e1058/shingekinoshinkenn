@@ -1,0 +1,48 @@
+# ── macOS ──────────────────────────────
+.DS_Store
+**/.DS_Store
+
+# ── Xcode / iOS ────────────────────────
+# ユーザー固有の設定（人によって変わる＝コンフリクトの常連）
+xcuserdata/
+**/xcuserdata/
+*.xcuserstate
+*.xcuserdatad
+# ビルド成果物
+build/
+DerivedData/
+*.xcworkspace/xcshareddata/swiftpm/configuration/
+# Swift Package Manager
+.swiftpm/
+.build/
+
+# ── Firebase / 秘密情報 ────────────────
+# 公開リポジトリにするため除外する
+GoogleService-Info.plist
+**/GoogleService-Info.plist
+**/firebase-config.js
+
+# 環境変数・認証情報
+.env
+.env.*
+!.env.example
+*.bak
+secrets.*
+**/secrets.*
+*.pem
+*.key
+*.p8
+*.p12
+*.mobileprovision
+
+# ── Web (web-parent) ───────────────────
+node_modules/
+dist/
+.cache/
+*.log
+npm-debug.log*
+
+# ── エディタ・その他 ───────────────────
+.vscode/
+.idea/
+*.swp
