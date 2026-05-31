@@ -768,17 +768,17 @@ function resetSelectionIfAbsent(playerKey, regStatusEl, cardEl) {
 // ── 検出器初期化 ──
 async function initPoseBattleSystem() {
   try {
-    setupStatus.textContent = "MediaPipe Pose 上半身特化検出器をロード中...";
+    setupStatus.textContent = "MediaPipe Pose 全身超高精度検出器をロード中...";
     
-    // BlazePose の検出器を設定（検出＆トラッキング信頼度を 0.5 に緩和し、超至近距離・上半身見切れに対応）
+    // 💡 全身を高精度で捉える最高の「全身超高精度モード (modelComplexity: 2)」に設定
+    // 左右の腰、胸、左右の肩、手首を完璧なワイヤーフレームとして鏡のように正確に描画
     detector = await poseDetection.createDetector(
       poseDetection.SupportedModels.BlazePose,
       {
         runtime: 'mediapipe',
-        modelComplexity: 1, // 至近距離で骨格が出現しやすくするため、あえて 1 (Full) に設定
-        upperBodyOnly: true, // 上半身特化
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5,
+        modelComplexity: 2, // 最高の全身超高精度全身モデル (Heavy)
+        minDetectionConfidence: 0.65,
+        minTrackingConfidence: 0.65,
         solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/pose'
       }
     );
