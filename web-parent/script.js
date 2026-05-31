@@ -35,6 +35,10 @@ const slashLine = document.getElementById('slashLine');
 const slashText = document.getElementById('slashText');
 const body = document.body;
 
+// ── 📸 バトルモーメント撮影・保存用変数 ──
+let capturedPhotoData = null;
+let photoCaptureTimeout = null;
+
 // ── ゲーム状態管理 ──
 let gameStatus = "selecting";
 let timeRemaining = 30;
@@ -503,6 +507,11 @@ async function startMatch() {
     }, { merge: true });
 
     startTimer();
+
+    // バトル開始から【15秒が経過した瞬間】にバックグラウンド自動激写撮影タイマーを始動！
+    if (photoCaptureTimeout) clearTimeout(photoCaptureTimeout);
+    capturedPhotoData = null;
+    photoCaptureTimeout = setTimeout(captureBattlePhoto, 15000);
   } catch (e) {
     console.error("startMatch エラー:", e);
   }
@@ -1270,6 +1279,11 @@ async function resetToHome() {
     if (banner) banner.remove();
   }
 
+  // 📸 写真関連のクリーンアップ
+  if (photoCaptureTimeout) clearTimeout(photoCaptureTimeout);
+  capturedPhotoData = null;
+  document.querySelectorAll(".winner-photo-container").forEach(c => c.remove());
+
   const drawBanner = document.querySelector(".draw-banner");
   if (drawBanner) drawBanner.remove();
   
@@ -1301,6 +1315,80 @@ async function resetToHome() {
   } catch (e) {
     console.error("Firestoreリセットエラー:", e);
   }
+}
+
+// ── 📸 バトル中（15秒経過時点）の自動写真撮影（キャプチャ） ──
+function captureBattlePhoto() {
+  if (gameStatus !== "playing") return;
+  console.log("📸 シャッターチャンス！自動撮影を実行します 📸");
+
+  try {
+    const captureCanvas = document.createElement("canvas");
+    captureCanvas.width = videoElement.videoWidth || 400;
+    captureCanvas.height = videoElement.videoHeight || 300;
+    const captureCtx = captureCanvas.getContext("2d");
+
+    // ビデオ表示と全く同じミラー反転設定で Canvas に複写
+    captureCtx.translate(captureCanvas.width, 0);
+    captureCtx.scale(-1, 1);
+    captureCtx.drawImage(videoElement, 0, 0, captureCanvas.width, captureCanvas.height);
+
+    capturedPhotoData = captureCanvas.toDataURL("image/jpeg", 0.85);
+    console.log("📸 バトル写真のキャプチャに成功しました 📸");
+
+    // 激写フラッシュ演出（画面全体を一瞬白くする）
+    document.body.classList.add("photo-flash");
+    
+    // シャッター音的な効果音（刀の音 katana）を再生
+    playWeaponSound("katana");
+
+    setTimeout(() => {
+      document.body.classList.remove("photo-flash");
+    }, 150);
+
+  } catch (e) {
+    console.error("写真キャプチャエラー:", e);
+  }
+}
+
+// ── 📸 勝者側の領域を Canvas でトリミング ──
+function cropWinnerPhoto(playerNum) {
+  if (!capturedPhotoData) return Promise.resolve(null);
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const cropCanvas = document.createElement("canvas");
+        cropCanvas.width = 200;
+        cropCanvas.height = 240;
+        const cropCtx = cropCanvas.getContext("2d");
+
+        // 元画像（ミラー全体 400x300）から勝者側（左半分または右半分）を切り抜き
+        // P1（画面左）＝ ミラー画像の左半分 (x: 0〜200)
+        // P2（画面右）＝ ミラー画像の右半分 (x: 200〜400)
+        const sourceX = playerNum === 1 ? 0 : 200;
+        const sourceY = 30; // 肩から顔が綺麗に収まる範囲
+        const sourceWidth = 200;
+        const sourceHeight = 240;
+
+        cropCtx.drawImage(
+          img,
+          sourceX, sourceY, sourceWidth, sourceHeight,
+          0, 0, cropCanvas.width, cropCanvas.height
+        );
+
+        resolve(cropCanvas.toDataURL("image/jpeg", 0.9));
+      } catch (e) {
+        console.error("トリミングエラー:", e);
+        resolve(capturedPhotoData); // エラー時は全体を返す
+      }
+    };
+    img.onerror = () => {
+      resolve(null);
+    };
+    img.src = capturedPhotoData;
+  });
 }
 
 // ── 💀 バトル終了時の勝利演出（敗者パネル両断・落下 ＆ 勝者お祝い） ──
@@ -1429,7 +1517,7 @@ async function triggerBattleEndSequence() {
     }, 250);
 
     // (3) 敗者落下中 (700ms後) に勝者側の超プレミアムお祝い演出を始動
-    setTimeout(() => {
+    setTimeout(async () => {
       // 勝者カードを光り輝かせて大きくする
       winnerCard.classList.add("winner-active");
 
@@ -1438,6 +1526,24 @@ async function triggerBattleEndSequence() {
       banner.className = "winner-banner";
       banner.innerHTML = "👑 WINNER 👑";
       winnerCard.appendChild(banner);
+
+      // 📸 勝者の写真をトリミングしてカード内に挿入！
+      if (capturedPhotoData) {
+        const croppedSrc = await cropWinnerPhoto(isP1Winner ? 1 : 2);
+        if (croppedSrc) {
+          const photoContainer = document.createElement("div");
+          photoContainer.className = "winner-photo-container";
+          photoContainer.innerHTML = `
+            <div class="winner-photo-title">BATTLE MOMENT</div>
+            <img class="winner-photo-neon" src="${croppedSrc}" alt="Winner Photo" />
+          `;
+          winnerCard.appendChild(photoContainer);
+          
+          requestAnimationFrame(() => {
+            photoContainer.classList.add("active");
+          });
+        }
+      }
 
       // 勝者の武器効果音でお祝い！
       playWeaponSound(winnerWeapon);

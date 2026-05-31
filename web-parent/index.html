@@ -992,6 +992,57 @@
             margin-top: 5px;
             font-family: 'Orbitron', sans-serif;
         }
+
+        /* 📸 カメラフラッシュエフェクト */
+        .photo-flash {
+            animation: cameraFlash 0.15s ease-out forwards;
+        }
+        @keyframes cameraFlash {
+            0% { filter: brightness(3.0); background-color: #ffffff; }
+            100% { filter: brightness(1.0); }
+        }
+
+        /* 👑 勝者写真 脈動する金色のネオンエフェクト */
+        .winner-photo-neon {
+            border: 3px solid #fff;
+            box-shadow: 0 0 10px #fff, 0 0 20px #ffd700, 0 0 30px #ffd700, 0 0 40px #ff8c00;
+            animation: pulseNeon 1.5s infinite alternate;
+            border-radius: 12px;
+            max-width: 200px;
+            height: 240px;
+            object-fit: cover;
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: block;
+            margin: 10px auto 0;
+        }
+        @keyframes pulseNeon {
+            from { box-shadow: 0 0 10px #fff, 0 0 20px #ffd700, 0 0 30px #ffd700; }
+            to { box-shadow: 0 0 15px #fff, 0 0 30px #ff8c00, 0 0 45px #ff4500, 0 0 60px #ff4500; }
+        }
+
+        /* 勝者写真ポップアップ表示コンテナ */
+        .winner-photo-container {
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .winner-photo-container.active {
+            opacity: 1;
+            transform: scale(1.0);
+        }
+        .winner-photo-title {
+            font-family: 'Orbitron', 'Space Grotesk', sans-serif;
+            font-size: 0.95rem;
+            color: #ffd700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            margin-bottom: 5px;
+            letter-spacing: 2px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body onclick="unlockAudio()">
