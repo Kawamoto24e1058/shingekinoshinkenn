@@ -223,8 +223,8 @@
             min-width: 180px;
             text-align: center;
         }
-        .preview-item.p1 { border-color: #ff416c; }
-        .preview-item.p2 { border-color: #00f2fe; }
+        .preview-item.p1 { border-color: #00f2fe; }
+        .preview-item.p2 { border-color: #ff416c; }
 
         .start-panel {
             width: 100%;
@@ -313,8 +313,8 @@
             position: absolute;
             top: 12px;
         }
-        .label-p1 { left: 40px; color: #ff416c; }
-        .label-p2 { right: 40px; color: #00f2fe; }
+        .label-p1 { left: 40px; color: #00f2fe; }
+        .label-p2 { right: 40px; color: #ff416c; }
 
         .score-num {
             font-size: 6rem;
@@ -324,8 +324,8 @@
             display: inline-block;
         }
 
-        #p1Score { color: #ff416c; text-shadow: 0 0 30px rgba(255, 65, 108, 0.8); }
-        #p2Score { color: #00f2fe; text-shadow: 0 0 30px rgba(0, 242, 254, 0.8); }
+        #p1Score { color: #00f2fe; text-shadow: 0 0 30px rgba(0, 242, 254, 0.8); }
+        #p2Score { color: #ff416c; text-shadow: 0 0 30px rgba(255, 65, 108, 0.8); }
 
         .vs-text {
             color: #4f678c;
@@ -338,8 +338,8 @@
         }
 
         .bump { transform: scale(1.25) rotate(3deg); }
-        .flash-p1 { background-color: rgba(255, 0, 60, 0.25) !important; }
-        .flash-p2 { background-color: rgba(0, 162, 255, 0.25) !important; }
+        .flash-p1 { background-color: rgba(0, 162, 255, 0.25) !important; }
+        .flash-p2 { background-color: rgba(255, 0, 60, 0.25) !important; }
 
         .slash-line {
             position: absolute;
@@ -354,14 +354,14 @@
         }
 
         .line-p1 {
-            background: linear-gradient(90deg, transparent, #fff 40%, #ff416c 60%, transparent);
-            box-shadow: 0 0 50px #ff003c, 0 0 20px #fff;
+            background: linear-gradient(90deg, transparent, #fff 40%, #00f2fe 60%, transparent);
+            box-shadow: 0 0 50px #00a2ff, 0 0 20px #fff;
             transform: translateY(-50%) rotate(-12deg);
         }
 
         .line-p2 {
-            background: linear-gradient(90deg, transparent, #fff 40%, #00f2fe 60%, transparent);
-            box-shadow: 0 0 50px #00a2ff, 0 0 20px #fff;
+            background: linear-gradient(90deg, transparent, #fff 40%, #ff416c 60%, transparent);
+            box-shadow: 0 0 50px #ff003c, 0 0 20px #fff;
             transform: translateY(-50%) rotate(12deg);
         }
 
@@ -389,11 +389,11 @@
         }
         .text-p1 {
             left: 20%;
-            text-shadow: 0 0 40px #ff003c, 0 0 60px #ff416c;
+            text-shadow: 0 0 40px #00a2ff, 0 0 60px #00f2fe;
         }
         .text-p2 {
             left: 69%;
-            text-shadow: 0 0 40px #00a2ff, 0 0 60px #00f2fe;
+            text-shadow: 0 0 40px #ff003c, 0 0 60px #ff416c;
         }
 
         .pop-animation {
@@ -671,10 +671,7 @@
         </div>
     </div>
 
-    <!-- 💡 カメラ画角の警告メッセージ表示エリア -->
-    <div class="camera-warning">
-        ⚠️【重要】骨格が消える場合は、Macの画面を少し手前に傾けて、胸とお腹が画面に入るようにしてください！
-    </div>
+
 
     <!-- Header Section -->
     <header>
@@ -765,10 +762,10 @@
             <div class="selection-grid">
                 <!-- PLAYER 1 Panel -->
                 <div class="selection-panel" id="p1-card">
-                    <div class="panel-title" style="color: #ff416c; border-color: rgba(255, 65, 108, 0.3);">PLAYER 1 <span>SELECT</span></div>
+                    <div class="panel-title" style="color: #00f2fe; border-color: rgba(0, 242, 254, 0.3);">PLAYER 1 <span>SELECT</span></div>
                     <div class="reg-box">
                         <div class="reg-label">武器選択＆抜刀ステータス</div>
-                        <div id="p1-reg-status" class="reg-status" style="color: #ff416c;">骨格検出待ち...</div>
+                        <div id="p1-reg-status" class="reg-status" style="color: #00f2fe;">骨格検出待ち...</div>
                     </div>
                     <div class="weapon-list">
                         <button id="p1-katana" class="weapon-option katana">
@@ -788,10 +785,10 @@
 
                 <!-- PLAYER 2 Panel -->
                 <div class="selection-panel" id="p2-card">
-                    <div class="panel-title" style="color: #00f2fe; border-color: rgba(0, 242, 254, 0.3);">PLAYER 2 <span>SELECT</span></div>
+                    <div class="panel-title" style="color: #ff416c; border-color: rgba(255, 65, 108, 0.3);">PLAYER 2 <span>SELECT</span></div>
                     <div class="reg-box">
                         <div class="reg-label">武器選択＆抜刀ステータス</div>
-                        <div id="p2-reg-status" class="reg-status" style="color: #00f2fe;">骨格検出待ち...</div>
+                        <div id="p2-reg-status" class="reg-status" style="color: #ff416c;">骨格検出待ち...</div>
                     </div>
                     <div class="weapon-list">
                         <button id="p2-katana" class="weapon-option katana">
