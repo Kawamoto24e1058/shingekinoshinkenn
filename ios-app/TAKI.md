@@ -39,7 +39,8 @@
 - [ ] UI とセンサー・振動ロジックの結線（画面遷移・状態受け渡し）
 
 ### 連携（はると協働）
-- [ ] 抜刀完了・構え完了のイベント／状態を、はるの Firestore 連携に渡せる形で公開
+- [x] ボタン押下で `matches/{matchId}` の `players.p1.{ready, drawn, weapon}` を送る導線を追加（REST API 直叩き）
+- [ ] 自動検知（CoreMotion）と Firestore 送信の結線：構え判定が立ったら `sendReady`、抜刀判定が立ったら `sendDrawComplete` を自動で呼ぶ
 - [ ] はると組んで、抜刀検知 → `players/p1/drawn = true` の繋ぎ込みテスト
 
 ---
@@ -68,6 +69,29 @@
 - 構え検出（腰／肩の後ろの姿勢判定）— `CMDeviceMotion.attitude` のロール・ピッチで判定する想定
 - 抜刀完了の判定（鞘から引き抜く移動量・速度ベクトル）
 - そのあと SwiftUI の画面（スタート / 武器セレクト / 抜刀待機）に組み込み、はるの Firestore 連携と繋ぐ
+
+### Firestore 連携（REST 直叩き版）
+
+- `ContentView` に 2 つの送信ボタンを実装済み。
+  - **「構え完了を送信」** → `FirestoreEventSender.sendReady(weapon:)`
+  - **「抜刀完了を送信」** → `FirestoreEventSender.sendDrawComplete(weapon:)`
+- どちらも Firestore REST API (`PATCH /v1/projects/{projectId}/databases/(default)/documents/matches/{matchId}`) を叩いて `matches/{matchId}` のフィールドを更新する。
+- 送信されるフィールド（`{playerId}` は `FirestoreConfig.plist` の値、`{weapon}` は選択中武器の `WeaponType.rawValue`）：
+
+  | イベント | フィールド | 値 |
+  |---------|-----------|----|
+  | ready   | `players.{playerId}.ready`     | `true` |
+  |         | `players.{playerId}.weapon`    | `"lightsaber" \| "greatsword" \| "smallsword"` |
+  |         | `players.{playerId}.readyAt`   | ISO8601 文字列 |
+  | drawn   | `players.{playerId}.drawn`     | `true` |
+  |         | `players.{playerId}.weapon`    | 同上 |
+  |         | `players.{playerId}.drawnAt`   | ISO8601 文字列 |
+
+- Firebase SDK はまだ使わず、`URLSession` だけで動かす簡易版。
+- ローカルに `ios-app/shingekinoshinkenn/FirestoreConfig.plist` を作り、`FirestoreConfig.example.plist` と同じキーで実値を入れる。
+- `FirestoreConfig.plist` は `.gitignore` 対象。公開リポジトリには入れない。
+- Firestore ルールがテストモード等で未認証書き込みを許可していない場合は `HTTP 403` になる。
+- 次の段階：上記ボタンの呼び出し元を CoreMotion の検知ロジックに差し替え、構え／抜刀の自動送信に切り替える。
 
 ---
 
