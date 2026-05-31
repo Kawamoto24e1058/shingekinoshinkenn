@@ -20,11 +20,14 @@
 | ファイル | 内容 | 主に読む人 |
 |----------|------|-----------|
 | [docs/CONCEPT.md](docs/CONCEPT.md) | アイディア・コンセプト・体験の流れ・対戦モード（発表のベースにもなる） | 全員 |
+| [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) | 技術全貌・アーキテクチャ・開発実績（発表資料のベース） | 全員 |
 | [docs/ROLES.md](docs/ROLES.md) | メンバーごとの役割・やることリスト・初手アクション | 全員 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 全体構成図・Firebase データモデル・連携の仕様 | 全員（特に繋ぎ込み担当） |
+| [docs/BRANCH_CHANGES.md](docs/BRANCH_CHANGES.md) | 他ブランチ由来の変更内容・マージ済み作業の整理 | 全員 |
 | [docs/BRANCH_STRATEGY.md](docs/BRANCH_STRATEGY.md) | ブランチ運用・コミット/PR ルール・コンフリクト回避 | 全員 |
 | [docs/SETUP.md](docs/SETUP.md) | 環境構築（iOS / Web / Firebase） | 全員 |
-| [ios-app/TAKI.md](ios-app/TAKI.md) | たき個人の作業メモ＆チェックリスト | たき |
+| [docs/STATUS.md](docs/STATUS.md) | 2026-05-31 時点の進捗・残タスク・発表準備メモ | 全員 |
+| [ios-app/TAKI.md](ios-app/TAKI.md) | タッキー（たき）個人の作業メモ＆チェックリスト | タッキー |
 
 ---
 
@@ -34,11 +37,17 @@
 shingekinoshinkenn/
 ├── README.md              ← いまここ
 ├── docs/                  ← 設計・運用ドキュメント
-├── ios-app/               ← iPhone アプリ（Xcode / Swift）  担当: たき
+├── ios-app/               ← iPhone アプリ（Xcode / Swift）  担当: タッキー
 │   ├── shingekinoshinkenn.xcodeproj
 │   ├── shingekinoshinkenn/
 │   └── TAKI.md
-└── web-parent/            ← PC 大画面用の Web（HTML/CSS/JS）  担当: はる・みずき
+├── web-parent/            ← PC 大画面用 Web 本体（現行）  担当: はる・みずき
+│   ├── index.html         ← バトルパネル（MediaPipe Pose でスイング検出）
+│   ├── script.js          ← Firebase Web SDK v10 連携・検出・音再生
+│   ├── style.css
+│   └── sounds/            ← 効果音（斬撃・大剣・ライトセーバー）
+├── a.html / b.html / c.html / d.html  ← 初期プロトタイプ（参考用に残置）
+└── script.js / styles.css / sounds/   ← 同上（旧プロトタイプ資産）
 ```
 
 - **担当フォルダの中だけで作業すれば、基本的にコンフリクトしません。**
