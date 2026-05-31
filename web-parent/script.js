@@ -155,7 +155,12 @@ function showVisuals(lineClass, textClass) {
 }
 
 // ── 🖥️ 【画面遷移システム】 ──
+let currentActiveScreen = "startScreen"; // 初期状態
+let lastScreenTransitionTime = 0; // スイング画面遷移の連打防止用
+
 function switchScreen(screenId) {
+  currentActiveScreen = screenId; // 現在のアクティブ画面を記録
+  
   document.querySelectorAll('.screen').forEach(screen => {
     screen.classList.remove('active');
   });
@@ -175,6 +180,35 @@ function switchScreen(screenId) {
   }
 }
 window.switchScreen = switchScreen; // グローバルに露出
+
+// ── 🎯 【グローバルスイング（決定）ハンドラー】 ──
+function handleGlobalSwing(playerKey) {
+  const now = Date.now();
+  
+  // 1. スタート画面 ＆ 説明画面での「決定（斬る動作）」画面遷移
+  if (currentActiveScreen === "startScreen" || currentActiveScreen === "guideScreen") {
+    // 誤作動・連打防止のため1.5秒のクールダウン
+    if (now - lastScreenTransitionTime < 1500) return;
+    lastScreenTransitionTime = now;
+    
+    // 決定時に爽快感のある斬撃効果音を再生
+    playWeaponSound("katana");
+    
+    if (currentActiveScreen === "startScreen") {
+      console.log("スイング検知：スタート画面決定 -> 説明画面へ");
+      switchScreen("guideScreen");
+    } else if (currentActiveScreen === "guideScreen") {
+      console.log("スイング検知：説明画面決定 -> 武器選択画面へ");
+      switchScreen("selectionScreen");
+    }
+    return;
+  }
+  
+  // 2. バトルステージ中（playingフェーズ）のスイング攻撃
+  if (gameStatus === "playing" && currentActiveScreen === "battleScreen") {
+    handleSwing(playerKey);
+  }
+}
 
 // ── 武器選択時の動的UI更新（ボタン点灯 ＆ プレビューテキスト更新） ──
 function updateWeaponUI(playerKey, weaponKey) {
@@ -638,7 +672,7 @@ function processMovementLogics(pose, playerKey) {
     }
 
     if (maxNormalizedDY > 0.09) {
-      handleSwing(playerKey);
+      handleGlobalSwing(playerKey);
     }
 
     if (currentLeftWristY !== null) state.prevLeftWristY = currentLeftWristY;
@@ -886,10 +920,12 @@ function drawSkeleton(poses) {
             ctx.restore();
           }
 
-          if (gameStatus === "selecting") {
+          // スイング検出（決定・攻撃）は常時裏でトラッキングを実行
+          processMovementLogics(pose, playerKey);
+
+          // 武器選択画面にいる時のみ、構えの吸い付き判定を行う
+          if (gameStatus === "selecting" && currentActiveScreen === "selectionScreen") {
             handleWeaponSelection(pose, playerKey, regStatusEl, cardEl);
-          } else if (gameStatus === "playing") {
-            processMovementLogics(pose, playerKey);
           }
         } catch (poseInnerErr) {
           console.log("各骨格の内部描画処理エラー:", poseInnerErr);
@@ -1144,3 +1180,13 @@ function setupFirestoreListener() {
     console.log("Firestore監視エラー:", e);
   }
 }
+
+// ── 🚀 起動時に自動でモーションキャプチャー（MediaPipe ＆ カメラ）を起動 ──
+document.addEventListener('DOMContentLoaded', () => {
+  console.log("アプリ起動：モーションキャプチャーを自動起動します。");
+  setTimeout(() => {
+    initPoseBattleSystem().catch(err => {
+      console.error("自動初期化エラー（ユーザー操作待ちなどの可能性）:", err);
+    });
+  }, 800); // ロード直後の競合を防ぐため少しディレイを置く
+});
