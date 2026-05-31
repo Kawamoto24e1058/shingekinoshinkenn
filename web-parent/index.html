@@ -437,7 +437,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            width: 440px;
+            width: 520px; /* 横幅を 440px から 520px へ拡大 */
             gap: 15px;
             z-index: 50;
             pointer-events: none; /* 下のボタンをクリックできるように */
@@ -446,8 +446,8 @@
 
         .monitor-border {
             position: relative;
-            width: 400px;
-            height: 300px;
+            width: 480px; /* 横幅を 400px から 480px へ一回り拡大 */
+            height: 360px; /* 縦幅を 300px から 360px へ拡大 (4:3アスペクト比維持) */
             border-radius: 20px;
             padding: 5px;
             background: linear-gradient(135deg, var(--neon-cyan) 0%, var(--neon-magenta) 100%);
