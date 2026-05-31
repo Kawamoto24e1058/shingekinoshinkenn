@@ -320,9 +320,11 @@ header {
   left: 5px;
   width: calc(100% - 10px);
   height: calc(100% - 10px);
-  z-index: 3;
+  z-index: 999; /* 💡 ビデオの上に確実に重ねるためz-indexを極限まで引き上げ */
   pointer-events: none;
   border-radius: 16px;
+  transform: translateZ(10px); /* 💡 3D合成レイヤーに引き上げてビデオの手前へ強制配置 */
+  will-change: transform;
 }
 
 /* Horizontal Timer Box below monitor */

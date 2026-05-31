@@ -488,6 +488,11 @@ function drawSkeleton(poses) {
     // 描画エリアの完全クリーン
     ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
+    // 💡 デバッグ用：Canvasがどこに重畳されているかを明示する薄いネオン枠線
+    ctx.strokeStyle = "rgba(0, 242, 254, 0.45)";
+    ctx.lineWidth = 3.0;
+    ctx.strokeRect(0, 0, canvasElement.width, canvasElement.height);
+
     ctx.save();
     ctx.translate(canvasElement.width, 0);
     ctx.scale(-1, 1); // 鏡像変換
@@ -524,7 +529,7 @@ function drawSkeleton(poses) {
               poseCenterX = rightWrist.x;
             }
 
-            const isP1 = poseCenterX < 200;
+            const isP1 = poseCenterX > 200; // 💡 ミラー反転：生画像で右側(x > 200)の人が、画面上では左側（Player1）に映る
             const selState = isP1 ? selectionState.player1 : selectionState.player2;
 
             // 吸い付き中は的の円を大きくするヒステリシス半径
@@ -658,7 +663,7 @@ function drawSkeleton(poses) {
             poseCenterX = rightWrist.x;
           }
 
-          const isPlayer1 = poseCenterX < 200;
+          const isPlayer1 = poseCenterX > 200; // 💡 ミラー反転：生画像で右側(x > 200)の人が、画面上では左側（Player1）に映る
           const playerKey = isPlayer1 ? 'player1' : 'player2';
           const playerColor = isPlayer1 ? '#00f2fe' : '#f35588';
           const shadowColor = isPlayer1 ? 'rgba(0, 242, 254, 0.8)' : 'rgba(243, 85, 136, 0.8)';
