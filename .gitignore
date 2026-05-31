@@ -21,6 +21,7 @@ DerivedData/
 GoogleService-Info.plist
 **/GoogleService-Info.plist
 **/firebase-config.js
+**/FirestoreConfig.plist
 
 # 環境変数・認証情報
 .env
