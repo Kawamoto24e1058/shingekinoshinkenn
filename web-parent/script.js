@@ -37,7 +37,7 @@ const body = document.body;
 
 // ── ゲーム状態管理 ──
 let gameStatus = "selecting";
-let timeRemaining = 90;
+let timeRemaining = 30;
 let timerInterval = null;
 let poseEngine = null; // Official MediaPipe Pose インスタンス
 let cameraEngine = null; // Official MediaPipe Camera インスタンス
@@ -481,7 +481,7 @@ async function startMatch() {
     document.querySelectorAll(".slice-container").forEach(c => c.remove());
 
     gameStatus = "playing";
-    timeRemaining = 90;
+    timeRemaining = 30;
     timerEl.textContent = timeRemaining;
     p1Score = 0;
     p2Score = 0;
