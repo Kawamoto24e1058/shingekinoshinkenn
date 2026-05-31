@@ -7,7 +7,8 @@
 - **フォルダ**：`ios-app/`
 - **ブランチ**：`feature/ios-setup`
 
-> 剣の選択は Web 側で行う。タッキーは抜刀・構えを**検知して ready / drawn を送る**ところを担当する。
+> 剣の選択は Web 側で行う。**構え完了の判定（`ready`）も Web 側（MediaPipe）が担当**する。
+> タッキーは抜刀を振動付きで実行し、完了（`drawn`）を Firestore に送信することに集中する。
 
 ---
 
@@ -21,9 +22,9 @@
 - [x] 加速度の値を取得できる（`MotionManager` で `userAcceleration` のマグニチュードを 60Hz 取得）
 - [ ] 傾きの値を取得できる（`CMDeviceMotion.attitude` の roll / pitch など）
 - [x] 振り（スイング）検出（加速度マグニチュード閾値 + デバウンス）
-- [ ] 「腰（刀）」の構え判定
-- [ ] 「肩の後ろ（大剣）」の構え判定
 - [ ] 抜刀完了（引き抜きの移動量）の判定ロジック
+- ~~[ ] 「腰（刀）」の構え判定~~ → **Web（MediaPipe）が担当**
+- ~~[ ] 「肩の後ろ（大剣）」の構え判定~~ → **Web（MediaPipe）が担当**
 
 ### 振動（CoreHaptics）
 - [x] 振動を 1 発鳴らす（★初手）
@@ -37,10 +38,11 @@
 - [x] 剣選択は Web 側で行う方針に変更
 
 ### 連携（はると協働）
-- [x] ボタン押下で `matches/{matchId}` の `players.p1.{ready, drawn}` を送る導線を追加（REST API 直叩き）
+- [x] ボタン押下で `matches/{matchId}` の `players.p1.drawn` を送る導線を追加（REST API 直叩き）
 - [x] Firebase との簡易連携テストで、データ送受信が動作することを確認
-- [ ] 自動検知（CoreMotion）と Firestore 送信の結線：構え判定が立ったら `sendReady`、抜刀判定が立ったら `sendDrawComplete` を自動で呼ぶ
+- [ ] 自動検知（CoreMotion）と Firestore 送信の結線：抜刀判定が立ったら `sendDrawComplete` を自動で呼ぶ
 - [ ] はると組んで、抜刀検知 → `players/p1/drawn = true` の繋ぎ込みテスト
+- ※ `ready` の送信は **Web（はる）が担当**。iOS 側では実装しない。
 
 ### 発表前タスク
 - [ ] 水木の正式フロントエンドコードと現状実装の統合を確認する
@@ -77,25 +79,24 @@
 
 ### Firestore 連携（REST 直叩き版）
 
-- `ContentView` に 2 つの送信ボタンを実装済み。
-  - **「構え完了を送信」** → `FirestoreEventSender.sendReady(weapon:)`
+- `ContentView` に送信ボタンを実装済み。
   - **「抜刀完了を送信」** → `FirestoreEventSender.sendDrawComplete(weapon:)`
-- どちらも Firestore REST API (`PATCH /v1/projects/{projectId}/databases/(default)/documents/matches/{matchId}`) を叩いて `matches/{matchId}` のフィールドを更新する。
-- 最終仕様では剣選択は Web 側が担当する。iOS からの `weapon` 送信は暫定実装で、削除または無視する。
-- iOS が送信するべきフィールド（`{playerId}` は `FirestoreConfig.plist` の値）：
+  - ~~「構え完了を送信」~~ → **構え判定は Web（はる）が担当**。iOS 側のボタン/実装は不要。
+- Firestore REST API (`PATCH /v1/projects/{projectId}/databases/(default)/documents/matches/{matchId}`) を叩いて `matches/{matchId}` のフィールドを更新する。
+- 剣選択は Web 側が担当する。iOS からの `weapon` 送信は暫定実装で、削除または無視する。
+- **iOS が送信するフィールド**（`{playerId}` は `FirestoreConfig.plist` の値）：
 
   | イベント | フィールド | 値 |
   |---------|-----------|----|
-  | ready   | `players.{playerId}.ready`     | `true` |
-  |         | `players.{playerId}.readyAt`   | ISO8601 文字列 |
   | drawn   | `players.{playerId}.drawn`     | `true` |
   |         | `players.{playerId}.drawnAt`   | ISO8601 文字列 |
 
+- `ready` / `readyAt` は **Web（はる）が書く**。iOS は担当しない。
 - Firebase SDK はまだ使わず、`URLSession` だけで動かす簡易版。
 - ローカルに `ios-app/shingekinoshinkenn/FirestoreConfig.plist` を作り、`FirestoreConfig.example.plist` と同じキーで実値を入れる（**Xcode の Target に追加して Copy Bundle Resources に入れる**。`FirestoreConfig.load()` は `Bundle.main` から読むため、含めないと常に `missingFile` になる）。
 - `FirestoreConfig.plist` は `.gitignore` 対象。公開リポジトリには入れない。
 - Firestore ルールがテストモード等で未認証書き込みを許可していない場合は `HTTP 403` になる。
-- 次の段階：上記ボタンの呼び出し元を CoreMotion の検知ロジックに差し替え、構え／抜刀の自動送信に切り替える。
+- 次の段階：上記ボタンの呼び出し元を CoreMotion の検知ロジックに差し替え、抜刀の自動 `drawn` 送信に切り替える。
 
 ### 2026-05-31 時点の共有状況
 
